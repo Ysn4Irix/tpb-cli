@@ -48,21 +48,31 @@ A fast, interactive Python CLI and automation tool for searching movies and TV s
 - Python 3.10 or higher
 - Git
 
-### Setup
+### Option 1: Direct Install via pip (Recommended)
+
+Install directly from GitHub with a single command:
+
+```bash
+pip install git+https://github.com/Ysn4Irix/tpb-cli.git
+```
+
+Or install from a pre-built wheel:
+```bash
+pip install tpb_cli-0.1.0-py3-none-any.whl
+```
+
+### Option 2: Local / Development Install
 
 ```bash
 # Clone the repository
 git clone https://github.com/Ysn4Irix/tpb-cli.git
 cd tpb-cli
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Install in editable mode for the 'tpb' executable command
+# Install in editable mode for development
 pip install -e .
 ```
 
-After installation, the `tpb` command will be globally accessible in your terminal.
+After installation, the `tpb` executable command will be immediately available in your terminal.
 
 ---
 
