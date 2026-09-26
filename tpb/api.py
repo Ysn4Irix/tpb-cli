@@ -95,10 +95,12 @@ class ApibayClient:
             raise ApibayError(f"Failed to parse JSON response from Apibay: {exc}") from exc
 
         if not isinstance(data, list):
+            self._cache[cache_key] = []
             return []
 
         # Check for dummy "No results returned" item
         if len(data) == 1 and (data[0].get("id") == "0" or data[0].get("name") == "No results returned"):
+            self._cache[cache_key] = []
             return []
 
         torrents: List[Torrent] = []

@@ -12,13 +12,14 @@ from InquirerPy.separator import Separator
 from rich.console import Console
 from rich.panel import Panel
 
-# Reduce Escape key detection delay from 500ms down to 10ms for instant back navigation
+# Reduce Escape key and multi-key timeouts from 500ms/1000ms down to 5ms for instant responsiveness
 _orig_app_init = prompt_toolkit.application.application.Application.__init__
 
 
 def _fast_app_init(self, *args, **kwargs):
     _orig_app_init(self, *args, **kwargs)
-    self.ttimeoutlen = 0.01
+    self.ttimeoutlen = 0.005  # 5ms escape sequence timeout
+    self.timeoutlen = 0.005   # 5ms key sequence timeout
 
 
 prompt_toolkit.application.application.Application.__init__ = _fast_app_init
@@ -76,7 +77,7 @@ def is_back(val: Any) -> bool:
     """Check if the user requested to go back via keybinding or text command."""
     if val is None:
         return True
-    if isinstance(val, str) and val.strip().lower() in ("b", "back", ":b"):
+    if isinstance(val, str) and val.strip().lower() in ("b", "back", ":b", "q", "quit"):
         return True
     if val == "back":
         return True
@@ -128,10 +129,6 @@ class InteractiveSession:
                     self.handle_general_flow()
 
                 console.print()
-                again = inquirer.confirm(message="Perform another search?", default=True).execute()
-                if not again:
-                    console.print("[dim]Goodbye![/dim]")
-                    break
 
         except KeyboardInterrupt:
             console.print("\n[yellow]Operation cancelled by user. Goodbye![/yellow]")
@@ -143,7 +140,11 @@ class InteractiveSession:
         show_name = ""
         season_num = 1
         quality_pref = "1080p"
+        torrents: List[Torrent] = []
+        season_packs: List[Torrent] = []
+        episodes_map: dict = {}
         selected_torrents: List[Torrent] = []
+        selection_source: str = "episodes"
 
         while True:
             if step == 1:
@@ -151,14 +152,20 @@ class InteractiveSession:
                 val = inquirer.text(
                     message="Enter TV show title (e.g. Severance, Breaking Bad):",
                     default=show_name,
-                    instruction="(Esc or 'b': go back)",
+                    instruction="(Esc, 'b', or 'q': go back)",
                     mandatory=False,
                     keybindings=TEXT_BACK_KEYBINDINGS,
                 ).execute()
 
                 if is_back(val):
-                    return  # Back to main menu
-                show_name = val.strip()
+                    return  # Instantly return to main menu
+
+                val_clean = val.strip()
+                if not val_clean:
+                    console.print("[red]Please enter a valid TV show title.[/red]")
+                    continue
+
+                show_name = val_clean
                 step = 2
 
             elif step == 2:
@@ -166,7 +173,7 @@ class InteractiveSession:
                 val = inquirer.text(
                     message="Enter Season number:",
                     default=str(season_num),
-                    instruction="(Esc or 'b': go back)",
+                    instruction="(Esc, 'b', or 'q': go back)",
                     mandatory=False,
                     keybindings=TEXT_BACK_KEYBINDINGS,
                 ).execute()
@@ -209,7 +216,7 @@ class InteractiveSession:
                 step = 4
 
             elif step == 4:
-                # Step 4: Fast Search & episode resolution (uses in-memory cache if already fetched!)
+                # Step 4: Fast Search & episode resolution (uses in-memory cache)
                 cache_key = (show_name.lower(), "")
                 if cache_key in self.client._cache:
                     torrents = self.client.search(show_name)
@@ -236,87 +243,117 @@ class InteractiveSession:
 
                 if season_packs:
                     console.print(f"\n[green][OK] Found {len(season_packs)} complete Season {season_num} pack(s)![/green]")
-                    choice_type = inquirer.select(
-                        message=f"How would you like to grab Season {season_num}?",
-                        choices=[
-                            Choice("episodes", f"📋 Select individual episodes ({len(episodes_map)} episode numbers detected)"),
-                            Choice("pack", f"📦 Grab a complete Season {season_num} pack ({season_packs[0].human_size})"),
-                            Separator(),
-                            Choice("back", "⬅️ Go Back [b / Esc / ←]"),
-                        ] if episodes_map else [
-                            Choice("pack", f"📦 Grab a complete Season {season_num} pack ({season_packs[0].human_size})"),
-                            Separator(),
-                            Choice("back", "⬅️ Go Back [b / Esc / ←]"),
-                        ],
-                        default="episodes" if episodes_map else "pack",
-                        instruction="(b / Esc / ←: go back)",
-                        mandatory=False,
-                        keybindings=SELECT_BACK_KEYBINDINGS,
-                    ).execute()
-
-                    if is_back(choice_type):
-                        step = 3
-                        continue
-
-                    if choice_type == "pack":
-                        pack_choices = [
-                            Choice(
-                                p,
-                                name=f"{p.name} ({p.quality}, {p.human_size}, {p.seeders} seeds, uploader: {p.username})"
-                            )
-                            for p in season_packs[:8]
-                        ]
-                        pack_choices.extend([Separator(), Choice("back", "⬅️ Go Back [b / Esc / ←]")])
-
-                        chosen_pack = inquirer.select(
-                            message="Select Season Pack:",
-                            choices=pack_choices,
-                            instruction="(b / Esc / ←: go back)",
-                            mandatory=False,
-                            keybindings=SELECT_BACK_KEYBINDINGS,
-                        ).execute()
-
-                        if is_back(chosen_pack):
-                            continue  # Re-prompt pack vs episodes
-
-                        selected_torrents = [chosen_pack]
-                    else:
-                        selected_torrents = self._select_episodes_flow(episodes_map, show_name, season_num)
-                        if is_back(selected_torrents):
-                            continue  # Re-prompt pack vs episodes
+                    step = 5  # Prompt pack vs episodes
+                elif episodes_map:
+                    step = 6  # Directly to episode selector
                 else:
-                    if not episodes_map:
-                        console.print(
-                            f"[yellow]Could not find specific Season {season_num} episodes for '{show_name}'.[/yellow]\n"
-                            f"[dim]Tip: Showing all search results so you can manually select releases:[/dim]"
-                        )
-                        render_torrents_table(torrents[:20], title=f"All Results for '{show_name}'")
-                        selected_torrents = self._manual_multi_select(torrents[:20])
-                        if is_back(selected_torrents):
-                            step = 3
-                            continue
-                    else:
-                        selected_torrents = self._select_episodes_flow(episodes_map, show_name, season_num)
-                        if is_back(selected_torrents):
-                            step = 3
-                            continue
+                    console.print(
+                        f"[yellow]Could not find specific Season {season_num} episodes for '{show_name}'.[/yellow]\n"
+                        f"[dim]Tip: Showing all search results so you can manually select releases:[/dim]"
+                    )
+                    render_torrents_table(torrents[:20], title=f"All Results for '{show_name}'")
+                    step = 7  # Manual multi-select
 
-                if not selected_torrents:
-                    console.print("[yellow]No torrents selected.[/yellow]")
+            elif step == 5:
+                # Step 5: Choose between Pack and Individual Episodes
+                choice_type = inquirer.select(
+                    message=f"How would you like to grab Season {season_num}?",
+                    choices=[
+                        Choice("episodes", f"📋 Select individual episodes ({len(episodes_map)} episode numbers detected)"),
+                        Choice("pack", f"📦 Grab a complete Season {season_num} pack ({season_packs[0].human_size})"),
+                        Separator(),
+                        Choice("back", "⬅️ Go Back [b / Esc / ←]"),
+                    ] if episodes_map else [
+                        Choice("pack", f"📦 Grab a complete Season {season_num} pack ({season_packs[0].human_size})"),
+                        Separator(),
+                        Choice("back", "⬅️ Go Back [b / Esc / ←]"),
+                    ],
+                    default="episodes" if episodes_map else "pack",
+                    instruction="(b / Esc / ←: go back)",
+                    mandatory=False,
+                    keybindings=SELECT_BACK_KEYBINDINGS,
+                ).execute()
+
+                if is_back(choice_type):
+                    step = 3  # Return to quality preference
+                    continue
+
+                if choice_type == "pack":
+                    step = 8  # Go to pack selector
+                else:
+                    step = 6  # Go to episode selector
+
+            elif step == 6:
+                # Step 6: Select individual episodes
+                res = self._select_episodes_flow(episodes_map, show_name, season_num)
+                if is_back(res):
+                    step = 5 if season_packs else 3
+                    continue
+
+                if not res:
+                    console.print("[yellow]No episodes selected.[/yellow]")
+                    continue
+
+                selected_torrents = res
+                selection_source = "episodes"
+                step = 9  # Export
+
+            elif step == 7:
+                # Step 7: Manual multi-select
+                res = self._manual_multi_select(torrents[:20])
+                if is_back(res):
                     step = 3
                     continue
 
-                step = 5
+                if not res:
+                    console.print("[yellow]No torrents selected.[/yellow]")
+                    continue
 
-            elif step == 5:
-                # Step 5: Export destination workflow
+                selected_torrents = res
+                selection_source = "manual"
+                step = 9  # Export
+
+            elif step == 8:
+                # Step 8: Select specific Season Pack
+                pack_choices = [
+                    Choice(
+                        p,
+                        name=f"{p.name} ({p.quality}, {p.human_size}, {p.seeders} seeds, uploader: {p.username})"
+                    )
+                    for p in season_packs[:8]
+                ]
+                pack_choices.extend([Separator(), Choice("back", "⬅️ Go Back [b / Esc / ←]")])
+
+                chosen_pack = inquirer.select(
+                    message="Select Season Pack:",
+                    choices=pack_choices,
+                    instruction="(b / Esc / ←: go back)",
+                    mandatory=False,
+                    keybindings=SELECT_BACK_KEYBINDINGS,
+                ).execute()
+
+                if is_back(chosen_pack):
+                    step = 5
+                    continue
+
+                selected_torrents = [chosen_pack]
+                selection_source = "pack"
+                step = 9  # Export
+
+            elif step == 9:
+                # Step 9: Export destination workflow
                 default_filename = f"{sanitize_filename(show_name)}_S{season_num:02d}_magnets.txt"
                 completed = self._export_workflow(selected_torrents, default_filename=default_filename)
                 if completed:
                     break
                 else:
-                    # User requested to go back from export workflow
-                    step = 4
+                    # User went back from export: return directly to their selection step!
+                    if selection_source == "pack":
+                        step = 8
+                    elif selection_source == "episodes":
+                        step = 6
+                    else:
+                        step = 7
 
     def _select_episodes_flow(
         self,
@@ -332,7 +369,7 @@ class InteractiveSession:
             candidates = episodes_map[ep_num]
             variants = get_episode_quality_variants(candidates)
 
-            sep_text = f"── Episode {ep_num:02d} ({len(variants)} quality option{'s' if len(variants) > 1 else ''}) ──"
+            sep_text = f"-- Episode {ep_num:02d} ({len(variants)} quality option{'s' if len(variants) > 1 else ''}) --"
             choices.append(Separator(sep_text))
 
             for idx, variant in enumerate(variants):
@@ -347,9 +384,9 @@ class InteractiveSession:
 
         console.print(f"\n[bold cyan]Found {total_eps} episode(s) for {show_name} Season {season_num}:[/bold cyan]")
         console.print(
-            "[dim]• Top release per episode is pre-checked [X] by default.\n"
-            "• Different quality options are listed underneath — use [Spacebar] to switch/toggle.\n"
-            "• Press [a] to toggle all, [Enter] to confirm, or [b / Esc / ←] to Go Back.[/dim]"
+            "[dim]* Top release per episode is pre-checked [X] by default.\n"
+            "* Different quality options are listed underneath -- use [Spacebar] to switch/toggle.\n"
+            "* Press [a] to toggle all, [Enter] to confirm, or [b / Esc / <-] to Go Back.[/dim]"
         )
 
         selected = inquirer.checkbox(
@@ -392,6 +429,7 @@ class InteractiveSession:
         """Workflow for searching movies with fast back navigation."""
         step = 1
         movie_title = ""
+        torrents: List[Torrent] = []
         selected: Optional[List[Torrent]] = None
 
         while True:
@@ -399,20 +437,29 @@ class InteractiveSession:
                 val = inquirer.text(
                     message="Enter movie title:",
                     default=movie_title,
-                    instruction="(Esc or 'b': go back)",
+                    instruction="(Esc, 'b', or 'q': go back)",
                     mandatory=False,
                     keybindings=TEXT_BACK_KEYBINDINGS,
                 ).execute()
 
                 if is_back(val):
-                    return  # Back to main menu
-                movie_title = val.strip()
+                    return  # Instantly return to main menu
+
+                val_clean = val.strip()
+                if not val_clean:
+                    console.print("[red]Please enter a valid movie title.[/red]")
+                    continue
+
+                movie_title = val_clean
                 step = 2
 
             elif step == 2:
-                cache_key = (movie_title.lower(), CAT_MOVIES_HD)
-                if cache_key in self.client._cache:
+                cache_key_hd = (movie_title.lower(), CAT_MOVIES_HD)
+                cache_key_all = (movie_title.lower(), "")
+                if cache_key_hd in self.client._cache:
                     torrents = self.client.search(movie_title, category=CAT_MOVIES_HD)
+                elif cache_key_all in self.client._cache:
+                    torrents = self.client.search(movie_title)
                 else:
                     with console.status(f"[cyan]Searching Apibay for '[bold]{movie_title}[/bold]'...[/cyan]", spinner="dots"):
                         try:
@@ -430,30 +477,35 @@ class InteractiveSession:
                     continue
 
                 render_torrents_table(torrents[:25], title=f"Results for '{movie_title}'")
-                selected = self._manual_multi_select(torrents[:25])
-                if is_back(selected):
-                    step = 1
-                    continue
-
-                if not selected:
-                    console.print("[yellow]No items selected.[/yellow]")
-                    step = 1
-                    continue
-
                 step = 3
 
             elif step == 3:
+                res = self._manual_multi_select(torrents[:25])
+                if is_back(res):
+                    step = 1
+                    continue
+
+                if not res:
+                    console.print("[yellow]No items selected.[/yellow]")
+                    continue
+
+                selected = res
+                step = 4
+
+            elif step == 4:
                 default_filename = f"{sanitize_filename(movie_title)}_magnets.txt"
                 completed = self._export_workflow(selected, default_filename=default_filename)
                 if completed:
                     break
                 else:
-                    step = 2
+                    # Going back from export returns directly to selection prompt without re-fetching
+                    step = 3
 
     def handle_general_flow(self) -> None:
         """Workflow for general search across all categories with fast back navigation."""
         step = 1
         query = ""
+        torrents: List[Torrent] = []
         selected: Optional[List[Torrent]] = None
 
         while True:
@@ -461,14 +513,20 @@ class InteractiveSession:
                 val = inquirer.text(
                     message="Enter search query:",
                     default=query,
-                    instruction="(Esc or 'b': go back)",
+                    instruction="(Esc, 'b', or 'q': go back)",
                     mandatory=False,
                     keybindings=TEXT_BACK_KEYBINDINGS,
                 ).execute()
 
                 if is_back(val):
-                    return  # Back to main menu
-                query = val.strip()
+                    return  # Instantly return to main menu
+
+                val_clean = val.strip()
+                if not val_clean:
+                    console.print("[red]Please enter a valid search query.[/red]")
+                    continue
+
+                query = val_clean
                 step = 2
 
             elif step == 2:
@@ -490,25 +548,28 @@ class InteractiveSession:
                     continue
 
                 render_torrents_table(torrents[:30], title=f"Results for '{query}'")
-                selected = self._manual_multi_select(torrents[:30])
-                if is_back(selected):
-                    step = 1
-                    continue
-
-                if not selected:
-                    console.print("[yellow]No items selected.[/yellow]")
-                    step = 1
-                    continue
-
                 step = 3
 
             elif step == 3:
+                res = self._manual_multi_select(torrents[:30])
+                if is_back(res):
+                    step = 1
+                    continue
+
+                if not res:
+                    console.print("[yellow]No items selected.[/yellow]")
+                    continue
+
+                selected = res
+                step = 4
+
+            elif step == 4:
                 default_filename = f"{sanitize_filename(query)}_magnets.txt"
                 completed = self._export_workflow(selected, default_filename=default_filename)
                 if completed:
                     break
                 else:
-                    step = 2
+                    step = 3
 
     def _export_workflow(self, torrents: List[Torrent], default_filename: str) -> bool:
         """
@@ -538,7 +599,7 @@ class InteractiveSession:
             file_str = inquirer.text(
                 message="Enter destination filename / path:",
                 default=default_filename,
-                instruction="(Esc or 'b': go back)",
+                instruction="(Esc, 'b', or 'q': go back)",
                 mandatory=False,
                 keybindings=TEXT_BACK_KEYBINDINGS,
             ).execute()
@@ -555,7 +616,7 @@ class InteractiveSession:
                     choices=[
                         Choice("overwrite", "🔄 Overwrite existing file"),
                         Choice("append", "➕ Append magnet links to file"),
-                        Choice("cancel", "🚫 Cancel file save"),
+                        Choice("cancel", "🚫 Cancel file save [b / Esc / ←]"),
                     ],
                     default="overwrite",
                     instruction="(b / Esc / ←: cancel)",
@@ -565,6 +626,7 @@ class InteractiveSession:
 
                 if is_back(conflict_action) or conflict_action == "cancel":
                     console.print("[yellow]File save cancelled.[/yellow]")
+                    return False
                 else:
                     append_mode = (conflict_action == "append")
                     count = export_magnets_to_file(torrents, dest_path, append=append_mode)
