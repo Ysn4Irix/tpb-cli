@@ -80,6 +80,11 @@ Examples:
         help="Force interactive selection even if search query is provided.",
     )
     parser.add_argument(
+        "-l", "--live",
+        action="store_true",
+        help="Launch real-time live search prompt as you type.",
+    )
+    parser.add_argument(
         "--api-url",
         type=str,
         default=None,
@@ -179,12 +184,19 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
+    client = ApibayClient(
+        base_url=args.api_url or "https://apibay.org",
+        proxy=args.proxy,
+    )
+
+    # If live search requested explicitly
+    if args.live:
+        session = InteractiveSession(client=client)
+        session.handle_live_flow()
+        sys.exit(0)
+
     # If no arguments provided or explicitly interactive
     if args.query is None or args.interactive:
-        client = ApibayClient(
-            base_url=args.api_url or "https://apibay.org",
-            proxy=args.proxy,
-        )
         session = InteractiveSession(client=client)
         session.run()
         sys.exit(0)

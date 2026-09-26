@@ -6,6 +6,10 @@ Interactive Python CLI application for searching movies and TV series and batch-
 
 ## ✨ Features
 
+- ⚡ **Live Real-Time Search**:
+  - Search Apibay in real time **as you type** with 250ms background debouncing.
+  - Interactive scrolling table directly under your query with instantaneous results.
+  - Navigate with `[↑/↓]`, select with `[Enter]`, or cancel with `[Esc]`.
 - 📺 **TV Series & Season Batch Scraper**:
   - Automatically identifies complete **Season Packs** or groups individual episodes (`E01`, `E02` ... `E24`).
   - **Quality preference filtering** (`1080p`, `720p`, `2160p/4K`, `480p`, or `Any`).
@@ -14,7 +18,7 @@ Interactive Python CLI application for searching movies and TV series and batch-
 - 🎬 **Movie Search & Selection**:
   - Search any movie title, view seeders/leechers, file size, codec, and release group in a colorized table.
 - ⚡ **Hybrid Mode**:
-  - **Interactive TUI**: Arrow-key menus, fuzzy search, and multi-select checkboxes when run with no arguments.
+  - **Live Search TUI & Menu**: Interactive arrow-key menus, fuzzy search, and multi-select checkboxes.
   - **Scriptable CLI Flags**: Automate batch exports directly from terminal or bash scripts.
 - 💾 **Export & Output**:
   - Save to text file (`.txt`) with smart default naming (`<show_name>_S<season>_magnets.txt`) and collision handling (overwrite/append).
@@ -100,6 +104,7 @@ python -m tpb.cli "The Matrix" --proxy "socks5://127.0.0.1:9050" --api-url "http
 | `-p` | `--print` | Print magnet links to terminal. |
 | | `--pack` | Prefer complete season pack if available. |
 | `-i` | `--interactive` | Force interactive menu even if query is passed. |
+| `-l` | `--live` | Launch real-time live search directly as you type. |
 | | `--api-url` | Custom Apibay API base URL. |
 | | `--proxy` | HTTP/SOCKS5 proxy URL. |
 | `-v` | `--version` | Show program version. |
