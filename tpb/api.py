@@ -48,6 +48,7 @@ class ApibayClient:
             "User-Agent": DEFAULT_USER_AGENT,
             "Accept": "application/json, text/plain, */*",
         }
+        self._cache = {}
 
     def _get_client(self) -> httpx.Client:
         kwargs = {
@@ -63,6 +64,7 @@ class ApibayClient:
         self,
         query: str,
         category: Optional[str] = None,
+        use_cache: bool = True,
     ) -> List[Torrent]:
         """
         Search apibay for a query string.
@@ -71,6 +73,10 @@ class ApibayClient:
         clean_query = query.strip()
         if not clean_query:
             return []
+
+        cache_key = (clean_query.lower(), category or "")
+        if use_cache and cache_key in self._cache:
+            return list(self._cache[cache_key])
 
         url = f"{self.base_url}/q.php"
         params = {"q": clean_query}
@@ -118,6 +124,7 @@ class ApibayClient:
 
         # Sort by seeders descending
         torrents.sort(key=lambda t: t.seeders, reverse=True)
+        self._cache[cache_key] = torrents
         return torrents
 
     def get_files(self, torrent_id: str) -> List[dict]:

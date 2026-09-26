@@ -1,15 +1,27 @@
-"""Interactive TUI / terminal workflow using InquirerPy and Rich with go-back support."""
+"""Interactive TUI / terminal workflow using InquirerPy and Rich with high-speed go-back support."""
 
 import re
 import sys
 from pathlib import Path
 from typing import List, Optional, Any
 
+import prompt_toolkit.application.application
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from InquirerPy.separator import Separator
 from rich.console import Console
 from rich.panel import Panel
+
+# Reduce Escape key detection delay from 500ms down to 10ms for instant back navigation
+_orig_app_init = prompt_toolkit.application.application.Application.__init__
+
+
+def _fast_app_init(self, *args, **kwargs):
+    _orig_app_init(self, *args, **kwargs)
+    self.ttimeoutlen = 0.01
+
+
+prompt_toolkit.application.application.Application.__init__ = _fast_app_init
 
 from tpb.api import ApibayClient, ApibayError, CAT_TV_HD, CAT_MOVIES_HD, CAT_ALL
 from tpb.models import Torrent
@@ -23,9 +35,34 @@ from tpb.exporter import render_torrents_table, render_magnet_list, export_magne
 
 console = Console()
 
-# Standard keybindings to skip/go back on Escape or Ctrl+C
-BACK_KEYBINDINGS = {"skip": [{"key": "escape"}, {"key": "c-c"}]}
-CHECKBOX_BACK_KEYBINDINGS = {"skip": [{"key": "escape"}, {"key": "c-c"}, {"key": "q"}, {"key": "b"}]}
+# Instant keybindings (0ms delay for single keys like 'b', 'q', 'left' and 10ms for 'escape')
+SELECT_BACK_KEYBINDINGS = {
+    "skip": [
+        {"key": "escape"},
+        {"key": "c-c"},
+        {"key": "b"},
+        {"key": "q"},
+        {"key": "left"},
+    ]
+}
+
+CHECKBOX_BACK_KEYBINDINGS = {
+    "skip": [
+        {"key": "escape"},
+        {"key": "c-c"},
+        {"key": "b"},
+        {"key": "q"},
+        {"key": "left"},
+    ]
+}
+
+TEXT_BACK_KEYBINDINGS = {
+    "skip": [
+        {"key": "escape"},
+        {"key": "c-c"},
+        {"key": "c-b"},
+    ]
+}
 
 
 def sanitize_filename(name: str) -> str:
@@ -58,7 +95,7 @@ class InteractiveSession:
             Panel.fit(
                 "[bold cyan]TPB / Apibay Interactive CLI[/bold cyan]\n"
                 "[dim]Search movies & TV series, grab magnet links, and batch export seasons.\n"
-                "Tip: Press [Esc] or select 'Go Back' at any prompt to return to the previous screen.[/dim]",
+                "Navigation: Press [Esc], [b], or [← Left Arrow] to instantly go back to the previous screen.[/dim]",
                 border_style="cyan",
             )
         )
@@ -76,7 +113,7 @@ class InteractiveSession:
                     ],
                     default="tv",
                     mandatory=False,
-                    keybindings=BACK_KEYBINDINGS,
+                    keybindings=SELECT_BACK_KEYBINDINGS,
                 ).execute()
 
                 if is_back(mode) or mode == "exit":
@@ -101,7 +138,7 @@ class InteractiveSession:
             sys.exit(0)
 
     def handle_tv_flow(self) -> None:
-        """Workflow for finding and downloading TV show seasons/episodes with back navigation."""
+        """Workflow for finding and downloading TV show seasons/episodes with instant back navigation."""
         step = 1
         show_name = ""
         season_num = 1
@@ -114,9 +151,9 @@ class InteractiveSession:
                 val = inquirer.text(
                     message="Enter TV show title (e.g. Severance, Breaking Bad):",
                     default=show_name,
-                    instruction="(press Esc or type 'b' to go back)",
+                    instruction="(Esc or 'b': go back)",
                     mandatory=False,
-                    keybindings=BACK_KEYBINDINGS,
+                    keybindings=TEXT_BACK_KEYBINDINGS,
                 ).execute()
 
                 if is_back(val):
@@ -129,9 +166,9 @@ class InteractiveSession:
                 val = inquirer.text(
                     message="Enter Season number:",
                     default=str(season_num),
-                    instruction="(press Esc or type 'b' to go back)",
+                    instruction="(Esc or 'b': go back)",
                     mandatory=False,
-                    keybindings=BACK_KEYBINDINGS,
+                    keybindings=TEXT_BACK_KEYBINDINGS,
                 ).execute()
 
                 if is_back(val):
@@ -156,11 +193,12 @@ class InteractiveSession:
                         Choice("2160p", "🔥 2160p / 4K (Ultra HD)"),
                         Choice("480p", "📼 480p / SD"),
                         Separator(),
-                        Choice("back", "⬅️ Go Back"),
+                        Choice("back", "⬅️ Go Back [b / Esc / ←]"),
                     ],
                     default=quality_pref,
+                    instruction="(b / Esc / ←: go back)",
                     mandatory=False,
-                    keybindings=BACK_KEYBINDINGS,
+                    keybindings=SELECT_BACK_KEYBINDINGS,
                 ).execute()
 
                 if is_back(val):
@@ -171,14 +209,18 @@ class InteractiveSession:
                 step = 4
 
             elif step == 4:
-                # Step 4: Search & episode resolution
-                with console.status(f"[cyan]Searching Apibay for '[bold]{show_name}[/bold]'...[/cyan]", spinner="dots"):
-                    try:
-                        torrents = self.client.search(show_name)
-                    except ApibayError as err:
-                        console.print(f"[bold red]Search Error:[/] {err}")
-                        step = 1
-                        continue
+                # Step 4: Fast Search & episode resolution (uses in-memory cache if already fetched!)
+                cache_key = (show_name.lower(), "")
+                if cache_key in self.client._cache:
+                    torrents = self.client.search(show_name)
+                else:
+                    with console.status(f"[cyan]Searching Apibay for '[bold]{show_name}[/bold]'...[/cyan]", spinner="dots"):
+                        try:
+                            torrents = self.client.search(show_name)
+                        except ApibayError as err:
+                            console.print(f"[bold red]Search Error:[/] {err}")
+                            step = 1
+                            continue
 
                 if not torrents:
                     console.print(f"[yellow]No results found on Apibay for '{show_name}'.[/yellow]")
@@ -200,15 +242,16 @@ class InteractiveSession:
                             Choice("episodes", f"📋 Select individual episodes ({len(episodes_map)} episode numbers detected)"),
                             Choice("pack", f"📦 Grab a complete Season {season_num} pack ({season_packs[0].human_size})"),
                             Separator(),
-                            Choice("back", "⬅️ Go Back"),
+                            Choice("back", "⬅️ Go Back [b / Esc / ←]"),
                         ] if episodes_map else [
                             Choice("pack", f"📦 Grab a complete Season {season_num} pack ({season_packs[0].human_size})"),
                             Separator(),
-                            Choice("back", "⬅️ Go Back"),
+                            Choice("back", "⬅️ Go Back [b / Esc / ←]"),
                         ],
                         default="episodes" if episodes_map else "pack",
+                        instruction="(b / Esc / ←: go back)",
                         mandatory=False,
-                        keybindings=BACK_KEYBINDINGS,
+                        keybindings=SELECT_BACK_KEYBINDINGS,
                     ).execute()
 
                     if is_back(choice_type):
@@ -223,13 +266,14 @@ class InteractiveSession:
                             )
                             for p in season_packs[:8]
                         ]
-                        pack_choices.extend([Separator(), Choice("back", "⬅️ Go Back")])
+                        pack_choices.extend([Separator(), Choice("back", "⬅️ Go Back [b / Esc / ←]")])
 
                         chosen_pack = inquirer.select(
                             message="Select Season Pack:",
                             choices=pack_choices,
+                            instruction="(b / Esc / ←: go back)",
                             mandatory=False,
-                            keybindings=BACK_KEYBINDINGS,
+                            keybindings=SELECT_BACK_KEYBINDINGS,
                         ).execute()
 
                         if is_back(chosen_pack):
@@ -299,20 +343,19 @@ class InteractiveSession:
                     f"E{ep_num:02d} [{variant.quality}{codec_tag}] {variant.name} "
                     f"[{variant.human_size} | {variant.seeders} seeds]{default_tag}"
                 )
-                # Only the top (best/preferred) candidate per episode is pre-checked by default!
                 choices.append(Choice(variant, name=label, enabled=is_default))
 
         console.print(f"\n[bold cyan]Found {total_eps} episode(s) for {show_name} Season {season_num}:[/bold cyan]")
         console.print(
             "[dim]• Top release per episode is pre-checked [X] by default.\n"
             "• Different quality options are listed underneath — use [Spacebar] to switch/toggle.\n"
-            "• Press [a] to toggle all, [Enter] to confirm selection, or [Esc]/[q] to Go Back.[/dim]"
+            "• Press [a] to toggle all, [Enter] to confirm, or [b / Esc / ←] to Go Back.[/dim]"
         )
 
         selected = inquirer.checkbox(
             message=f"Select episodes & qualities to include in export ({total_eps} episodes):",
             choices=choices,
-            instruction="(Space: toggle, a: toggle all, Enter: confirm, Esc/q: Go Back)",
+            instruction="(Space: toggle, a: all, Enter: confirm, b/Esc/←: Go Back)",
             mandatory=False,
             keybindings=CHECKBOX_BACK_KEYBINDINGS,
         ).execute()
@@ -335,7 +378,7 @@ class InteractiveSession:
         selected = inquirer.checkbox(
             message="Check off the torrents you want:",
             choices=choices,
-            instruction="(Space: toggle, Enter: confirm, Esc/q: Go Back)",
+            instruction="(Space: toggle, Enter: confirm, b/Esc/←: Go Back)",
             mandatory=False,
             keybindings=CHECKBOX_BACK_KEYBINDINGS,
         ).execute()
@@ -346,7 +389,7 @@ class InteractiveSession:
         return selected or []
 
     def handle_movie_flow(self) -> None:
-        """Workflow for searching movies with back navigation."""
+        """Workflow for searching movies with fast back navigation."""
         step = 1
         movie_title = ""
         selected: Optional[List[Torrent]] = None
@@ -356,9 +399,9 @@ class InteractiveSession:
                 val = inquirer.text(
                     message="Enter movie title:",
                     default=movie_title,
-                    instruction="(press Esc or type 'b' to go back)",
+                    instruction="(Esc or 'b': go back)",
                     mandatory=False,
-                    keybindings=BACK_KEYBINDINGS,
+                    keybindings=TEXT_BACK_KEYBINDINGS,
                 ).execute()
 
                 if is_back(val):
@@ -367,15 +410,19 @@ class InteractiveSession:
                 step = 2
 
             elif step == 2:
-                with console.status(f"[cyan]Searching Apibay for '[bold]{movie_title}[/bold]'...[/cyan]", spinner="dots"):
-                    try:
-                        torrents = self.client.search(movie_title, category=CAT_MOVIES_HD)
-                        if not torrents:
-                            torrents = self.client.search(movie_title)
-                    except ApibayError as err:
-                        console.print(f"[bold red]Search Error:[/] {err}")
-                        step = 1
-                        continue
+                cache_key = (movie_title.lower(), CAT_MOVIES_HD)
+                if cache_key in self.client._cache:
+                    torrents = self.client.search(movie_title, category=CAT_MOVIES_HD)
+                else:
+                    with console.status(f"[cyan]Searching Apibay for '[bold]{movie_title}[/bold]'...[/cyan]", spinner="dots"):
+                        try:
+                            torrents = self.client.search(movie_title, category=CAT_MOVIES_HD)
+                            if not torrents:
+                                torrents = self.client.search(movie_title)
+                        except ApibayError as err:
+                            console.print(f"[bold red]Search Error:[/] {err}")
+                            step = 1
+                            continue
 
                 if not torrents:
                     console.print(f"[yellow]No movie releases found for '{movie_title}'.[/yellow]")
@@ -404,7 +451,7 @@ class InteractiveSession:
                     step = 2
 
     def handle_general_flow(self) -> None:
-        """Workflow for general search across all categories with back navigation."""
+        """Workflow for general search across all categories with fast back navigation."""
         step = 1
         query = ""
         selected: Optional[List[Torrent]] = None
@@ -414,9 +461,9 @@ class InteractiveSession:
                 val = inquirer.text(
                     message="Enter search query:",
                     default=query,
-                    instruction="(press Esc or type 'b' to go back)",
+                    instruction="(Esc or 'b': go back)",
                     mandatory=False,
-                    keybindings=BACK_KEYBINDINGS,
+                    keybindings=TEXT_BACK_KEYBINDINGS,
                 ).execute()
 
                 if is_back(val):
@@ -425,13 +472,17 @@ class InteractiveSession:
                 step = 2
 
             elif step == 2:
-                with console.status(f"[cyan]Searching Apibay for '[bold]{query}[/bold]'...[/cyan]", spinner="dots"):
-                    try:
-                        torrents = self.client.search(query, category=CAT_ALL)
-                    except ApibayError as err:
-                        console.print(f"[bold red]Search Error:[/] {err}")
-                        step = 1
-                        continue
+                cache_key = (query.lower(), CAT_ALL)
+                if cache_key in self.client._cache:
+                    torrents = self.client.search(query, category=CAT_ALL)
+                else:
+                    with console.status(f"[cyan]Searching Apibay for '[bold]{query}[/bold]'...[/cyan]", spinner="dots"):
+                        try:
+                            torrents = self.client.search(query, category=CAT_ALL)
+                        except ApibayError as err:
+                            console.print(f"[bold red]Search Error:[/] {err}")
+                            step = 1
+                            continue
 
                 if not torrents:
                     console.print(f"[yellow]No results found for '{query}'.[/yellow]")
@@ -471,11 +522,12 @@ class InteractiveSession:
                 Choice("console", "🖥️ Print magnet links to console"),
                 Choice("both", "✨ Both (Save to text file & Print to console)"),
                 Separator(),
-                Choice("back", "⬅️ Go Back"),
+                Choice("back", "⬅️ Go Back [b / Esc / ←]"),
             ],
             default="file",
+            instruction="(b / Esc / ←: go back)",
             mandatory=False,
-            keybindings=BACK_KEYBINDINGS,
+            keybindings=SELECT_BACK_KEYBINDINGS,
         ).execute()
 
         if is_back(action):
@@ -486,9 +538,9 @@ class InteractiveSession:
             file_str = inquirer.text(
                 message="Enter destination filename / path:",
                 default=default_filename,
-                instruction="(press Esc or type 'b' to go back)",
+                instruction="(Esc or 'b': go back)",
                 mandatory=False,
-                keybindings=BACK_KEYBINDINGS,
+                keybindings=TEXT_BACK_KEYBINDINGS,
             ).execute()
 
             if is_back(file_str):
@@ -506,8 +558,9 @@ class InteractiveSession:
                         Choice("cancel", "🚫 Cancel file save"),
                     ],
                     default="overwrite",
+                    instruction="(b / Esc / ←: cancel)",
                     mandatory=False,
-                    keybindings=BACK_KEYBINDINGS,
+                    keybindings=SELECT_BACK_KEYBINDINGS,
                 ).execute()
 
                 if is_back(conflict_action) or conflict_action == "cancel":
