@@ -33,3 +33,4 @@ Build a hybrid interactive Python CLI application to search movies and TV series
 - Apibay returns a single dummy object `[{"name": "No results returned", "id": "0", ...}]` when 0 hits occur; explicitly handled.
 - Trackers include standard high-uptime public trackers (`opentrackr`, `openbittorrent`, etc.) so magnets resolve immediately in any client.
 - Windows CP1252-safe output handling prevents Unicode encoding crashes on classic consoles.
+- Option A implemented: Immediate Apibay query after title input with auto-detected seasons menu, regional disambiguation (e.g. US vs UK), and instant 0ms back navigation.
