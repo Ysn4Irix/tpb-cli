@@ -3,11 +3,11 @@
 import re
 import sys
 from pathlib import Path
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Sequence
 
 import prompt_toolkit.application.application
 from InquirerPy import inquirer
-from InquirerPy.base.control import Choice
+from InquirerPy.base.control import Choice, InquirerPyUIListControl
 from InquirerPy.separator import Separator
 from rich.console import Console
 from rich.panel import Panel
@@ -24,8 +24,25 @@ def _fast_app_init(self, *args, **kwargs):
 
 prompt_toolkit.application.application.Application.__init__ = _fast_app_init
 
+# Patch InquirerPy Choice handling: avoid dataclasses.asdict(choice) which recursively
+# decomposes nested dataclass instances (like Torrent) into plain dicts.
+_orig_get_choices = InquirerPyUIListControl._get_choices
+
+
+def _safe_get_choices(self, choices, default):
+    if isinstance(choices, list):
+        choices = [
+            {"name": ch.name, "value": ch.value, "enabled": ch.enabled}
+            if isinstance(ch, Choice) else ch
+            for ch in choices
+        ]
+    return _orig_get_choices(self, choices, default)
+
+
+InquirerPyUIListControl._get_choices = _safe_get_choices
+
 from tpb.api import ApibayClient, ApibayError, CAT_TV_HD, CAT_MOVIES_HD, CAT_ALL
-from tpb.models import Torrent
+from tpb.models import Torrent, ensure_torrents
 from tpb.parser import (
     filter_and_group_episodes,
     get_season_packs,
@@ -431,7 +448,7 @@ class InteractiveSession:
                     console.print("[yellow]No episodes selected.[/yellow]")
                     continue
 
-                selected_torrents = res
+                selected_torrents = ensure_torrents(res)
                 selection_source = "episodes"
                 step = 9  # Export
 
@@ -446,7 +463,7 @@ class InteractiveSession:
                     console.print("[yellow]No torrents selected.[/yellow]")
                     continue
 
-                selected_torrents = res
+                selected_torrents = ensure_torrents(res)
                 selection_source = "manual"
                 step = 9  # Export
 
@@ -473,7 +490,7 @@ class InteractiveSession:
                     step = 5
                     continue
 
-                selected_torrents = [chosen_pack]
+                selected_torrents = ensure_torrents([chosen_pack])
                 selection_source = "pack"
                 step = 9  # Export
 
@@ -626,7 +643,7 @@ class InteractiveSession:
                     console.print("[yellow]No items selected.[/yellow]")
                     continue
 
-                selected = res
+                selected = ensure_torrents(res)
                 step = 4
 
             elif step == 4:
@@ -697,7 +714,7 @@ class InteractiveSession:
                     console.print("[yellow]No items selected.[/yellow]")
                     continue
 
-                selected = res
+                selected = ensure_torrents(res)
                 step = 4
 
             elif step == 4:
@@ -708,11 +725,16 @@ class InteractiveSession:
                 else:
                     step = 3
 
-    def _export_workflow(self, torrents: List[Torrent], default_filename: str) -> bool:
+    def _export_workflow(self, torrents: Sequence[Any], default_filename: str) -> bool:
         """
         Handles export actions: Save to file and/or print to console (P2: B, Edge 1: A).
         Returns True if export completed, False if user chose to Go Back.
         """
+        torrents = ensure_torrents(torrents)
+        if not torrents:
+            console.print("[yellow]No torrents provided for export.[/yellow]")
+            return False
+
         action = inquirer.select(
             message="Choose output action:",
             choices=[

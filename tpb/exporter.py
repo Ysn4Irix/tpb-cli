@@ -1,18 +1,19 @@
 """Export utilities for magnet links and terminal rendering."""
 
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Sequence, Any
 from rich.console import Console
 from rich.table import Table
 
-from tpb.models import Torrent
+from tpb.models import Torrent, ensure_torrents
 
 # Force UTF-8 safe rendering
 console = Console()
 
 
-def render_torrents_table(torrents: List[Torrent], title: str = "Search Results") -> None:
+def render_torrents_table(torrents: Sequence[Any], title: str = "Search Results") -> None:
     """Render a styled Rich table of torrents."""
+    torrents = ensure_torrents(torrents)
     if not torrents:
         console.print("[yellow]No torrents to display.[/yellow]")
         return
@@ -58,8 +59,9 @@ def render_torrents_table(torrents: List[Torrent], title: str = "Search Results"
     console.print(table)
 
 
-def render_magnet_list(torrents: List[Torrent]) -> None:
+def render_magnet_list(torrents: Sequence[Any]) -> None:
     """Print magnet links directly to the console."""
+    torrents = ensure_torrents(torrents)
     if not torrents:
         return
 
@@ -70,7 +72,7 @@ def render_magnet_list(torrents: List[Torrent]) -> None:
 
 
 def export_magnets_to_file(
-    torrents: List[Torrent],
+    torrents: Sequence[Any],
     file_path: Path,
     append: bool = False,
     include_metadata_comments: bool = True,
@@ -79,6 +81,7 @@ def export_magnets_to_file(
     Write magnet links to a text file.
     Returns the number of written links.
     """
+    torrents = ensure_torrents(torrents)
     if not torrents:
         return 0
 

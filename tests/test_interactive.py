@@ -156,3 +156,57 @@ def test_movie_flow_instant_back_navigation():
 
         sess.handle_movie_flow()
 
+
+def test_inquirerpy_choice_preserves_torrent_dataclass():
+    """Verify that InquirerPy Choice does not decompose Torrent dataclass into a dict."""
+    import tpb.interactive  # Ensures monkey-patch is applied
+    from InquirerPy.base.control import Choice
+    from InquirerPy.prompts.checkbox import InquirerPyCheckboxControl
+    from tpb.models import Torrent
+
+    t = Torrent(id="1", name="Test.S01E01", info_hash="abc", leechers=0, seeders=10, size_bytes=1000)
+    choice = Choice(t, name="Test S01E01", enabled=True)
+
+    ctrl = InquirerPyCheckboxControl(
+        [choice],
+        default=None,
+        pointer=">",
+        enabled_symbol="[X]",
+        disabled_symbol="[ ]",
+        session_result=None,
+    )
+    stored_choice = ctrl._choices[0]
+    assert isinstance(stored_choice["value"], Torrent)
+    assert stored_choice["value"].name == "Test.S01E01"
+
+
+def test_export_workflow_with_dict_torrents(tmp_path):
+    """Verify _export_workflow accepts dict representations without crashing."""
+    from unittest.mock import patch, MagicMock
+    import dataclasses
+    from tpb.interactive import InteractiveSession
+    from tpb.models import Torrent
+
+    t = Torrent(id="1", name="Test.Show.S01E01", info_hash="111222333444", leechers=0, seeders=5, size_bytes=1000)
+    d = dataclasses.asdict(t)
+
+    sess = InteractiveSession(client=MagicMock())
+    out_file = str(tmp_path / "out_magnets.txt")
+
+    with patch("InquirerPy.inquirer.select") as mock_select, \
+         patch("InquirerPy.inquirer.text") as mock_text:
+
+        s_mock = MagicMock()
+        s_mock.execute.return_value = "file"
+        mock_select.return_value = s_mock
+
+        t_mock = MagicMock()
+        t_mock.execute.return_value = out_file
+        mock_text.return_value = t_mock
+
+        res = sess._export_workflow([d], default_filename="test.txt")
+        assert res is True
+        assert (tmp_path / "out_magnets.txt").exists()
+        content = (tmp_path / "out_magnets.txt").read_text(encoding="utf-8")
+        assert "Test.Show.S01E01" in content
+

@@ -1,8 +1,8 @@
 """Data models for torrents and metadata."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
-from typing import Optional, List
+from typing import Optional, List, Sequence, Any
 import urllib.parse
 
 # List of high-uptime public trackers
@@ -76,3 +76,42 @@ class Torrent:
     @property
     def is_trusted(self) -> bool:
         return self.status.lower() == "trusted"
+
+
+def ensure_torrent(item: Any) -> Torrent:
+    """
+    Ensure an item is a Torrent instance; if it is a dict, reconstruct a Torrent from it.
+    Supports dicts from dataclasses.asdict(t) as well as raw Apibay API dictionaries.
+    """
+    if isinstance(item, Torrent):
+        return item
+    if isinstance(item, dict):
+        field_names = {f.name for f in fields(Torrent)}
+        d = dict(item)
+        if "size" in d and "size_bytes" not in d:
+            try:
+                d["size_bytes"] = int(d.pop("size"))
+            except (ValueError, TypeError):
+                d["size_bytes"] = 0
+        if "id" in d:
+            d["id"] = str(d["id"])
+        if "seeders" in d:
+            try:
+                d["seeders"] = int(d["seeders"])
+            except (ValueError, TypeError):
+                d["seeders"] = 0
+        if "leechers" in d:
+            try:
+                d["leechers"] = int(d["leechers"])
+            except (ValueError, TypeError):
+                d["leechers"] = 0
+        filtered = {k: v for k, v in d.items() if k in field_names}
+        return Torrent(**filtered)
+    raise TypeError(f"Expected Torrent or dict, got {type(item)}")
+
+
+def ensure_torrents(items: Sequence[Any]) -> List[Torrent]:
+    """Ensure all items in sequence are Torrent instances."""
+    if not items:
+        return []
+    return [ensure_torrent(item) for item in items]
