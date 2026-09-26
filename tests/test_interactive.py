@@ -57,25 +57,61 @@ def test_tv_flow_instant_back_navigation():
          patch("InquirerPy.inquirer.select") as mock_select, \
          patch("InquirerPy.inquirer.checkbox") as mock_checkbox:
 
-        # Step 1: 'Severance', Step 2: '1', then on back from step 2 to step 1: 'b', then step 1: 'b'
+        # Step 1: title 'Severance', then after backing out from Step 3 -> Step 1: 'b'
         t_mock = MagicMock()
-        t_mock.execute.side_effect = ["Severance", "1", "b", "b"]
+        t_mock.execute.side_effect = ["Severance", "b"]
         mock_text.return_value = t_mock
 
-        # Step 3: '1080p', Step 9 (Export): 'back', on returning to Step 3: 'back'
+        # Step 3: selects season 1
+        # Step 4: selects '1080p'
+        # Step 9 (Export): selects 'back' -> returns to Step 6
+        # On Step 4 (after back from Step 6): selects 'back' -> returns to Step 3
+        # On Step 3: selects 'back' -> returns to Step 1
         s_mock = MagicMock()
-        s_mock.execute.side_effect = ["1080p", "back", "back"]
+        s_mock.execute.side_effect = [1, "1080p", "back", "back", "back"]
         mock_select.return_value = s_mock
 
-        # Step 6: returns [mock_torrent] -> goes to Step 9
-        # Step 9 user selects 'back' -> goes back to Step 6
-        # Step 6 user selects 'back' (None) -> goes back to Step 3
+        # Step 6: first returns [mock_torrent] -> goes to Step 9
+        # Step 6: then on back from Step 9, returns None (back) -> goes to Step 4
         cb_mock = MagicMock()
         cb_mock.execute.side_effect = [[mock_torrent], None]
         mock_checkbox.return_value = cb_mock
 
         sess.handle_tv_flow()
         # Verifies that navigation returned cleanly without infinite loops or errors
+
+
+def test_tv_flow_series_disambiguation():
+    from unittest.mock import patch, MagicMock
+    from tpb.interactive import InteractiveSession
+    from tpb.models import Torrent
+    from tpb.parser import enrich_torrent_metadata
+
+    mock_client = MagicMock()
+    mock_client._cache = {}
+    t_us1 = enrich_torrent_metadata(Torrent(id="1", name="The.Office.US.S01E01.1080p", info_hash="1", leechers=1, seeders=10, size_bytes=100))
+    t_us2 = enrich_torrent_metadata(Torrent(id="2", name="The.Office.US.S01E02.1080p", info_hash="2", leechers=1, seeders=10, size_bytes=100))
+    t_uk1 = enrich_torrent_metadata(Torrent(id="3", name="The.Office.UK.S01E01.720p", info_hash="3", leechers=1, seeders=10, size_bytes=100))
+    t_uk2 = enrich_torrent_metadata(Torrent(id="4", name="The.Office.UK.S01E02.720p", info_hash="4", leechers=1, seeders=10, size_bytes=100))
+    mock_client.search.return_value = [t_us1, t_us2, t_uk1, t_uk2]
+
+    sess = InteractiveSession(client=mock_client)
+
+    with patch("InquirerPy.inquirer.text") as mock_text, \
+         patch("InquirerPy.inquirer.select") as mock_select:
+
+        # Step 1: 'The Office', then on back returns 'b'
+        t_mock = MagicMock()
+        t_mock.execute.side_effect = ["The Office", "b"]
+        mock_text.return_value = t_mock
+
+        # Step 25: Disambiguation choice -> user picks 'back'
+        s_mock = MagicMock()
+        s_mock.execute.side_effect = ["back"]
+        mock_select.return_value = s_mock
+
+        sess.handle_tv_flow()
+
 
 
 def test_movie_flow_instant_back_navigation():

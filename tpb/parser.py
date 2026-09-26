@@ -26,9 +26,9 @@ EPISODE_REGEX_X = re.compile(
     r"\b(?P<season>\d{1,2})x(?P<ep_start>\d{1,2})\b"
 )
 
-# Season pack matchers: "Season 1", "S01", "S1", "Season 01-05"
+# Season pack matchers: "Season 1", "Season.1", "S01", "S1", "Season 01-05"
 SEASON_PACK_REGEX = re.compile(
-    r"(?:\b[sS]eason\s*(?P<season>\d{1,2})\b|\b[sS](?P<s_tag>\d{1,2})\b)",
+    r"(?:(?:\b|(?<=_))[sS]eason[\s._-]*(?P<season>\d{1,2})(?:\b|(?=_))|(?:\b|(?<=_))[sS](?P<s_tag>\d{1,2})(?:\b|(?=_)))",
     re.IGNORECASE,
 )
 MULTI_SEASON_PACK_REGEX = re.compile(
@@ -181,4 +181,76 @@ def get_episode_quality_variants(
                     break
 
     return variants
+
+
+def get_detected_seasons_summary(torrents: List[Torrent]) -> Dict[int, dict]:
+    """
+    Scans a list of torrents and returns an ordered dictionary of detected seasons:
+    {
+        season_num: {
+            "season": int,
+            "episodes": set of int episode numbers,
+            "packs": list of Torrent packs (sorted by seeders descending),
+            "torrents": list of all Torrent objects matching this season,
+            "total_torrents": int,
+            "qualities": list of distinct qualities,
+            "max_seeders": int,
+        }
+    }
+    """
+    seasons: Dict[int, dict] = {}
+    for t in torrents:
+        if t.season is None:
+            enrich_torrent_metadata(t)
+        s = t.season
+        if s is not None and s > 0:
+            if s not in seasons:
+                seasons[s] = {
+                    "season": s,
+                    "episodes": set(),
+                    "packs": [],
+                    "torrents": [],
+                    "total_torrents": 0,
+                    "qualities": set(),
+                    "max_seeders": 0,
+                }
+            seasons[s]["torrents"].append(t)
+            seasons[s]["total_torrents"] += 1
+            if t.quality and t.quality != "Unknown":
+                seasons[s]["qualities"].add(t.quality)
+            if t.seeders > seasons[s]["max_seeders"]:
+                seasons[s]["max_seeders"] = t.seeders
+            if t.is_season_pack:
+                seasons[s]["packs"].append(t)
+            if t.episodes:
+                seasons[s]["episodes"].update(t.episodes)
+
+    for s in seasons:
+        seasons[s]["packs"].sort(key=lambda x: x.seeders, reverse=True)
+        seasons[s]["qualities"] = sorted(list(seasons[s]["qualities"]))
+
+    return dict(sorted(seasons.items()))
+
+
+def detect_series_variants(torrents: List[Torrent]) -> Dict[str, List[Torrent]]:
+    """
+    Detect if search results contain distinct regional tags (e.g. US, UK, AU)
+    where multiple variants have 2 or more releases.
+    Returns: mapping tag -> list of torrents.
+    """
+    tag_pattern = re.compile(r"\b(US|UK|AU|NZ|CA)\b", re.IGNORECASE)
+    groups: Dict[str, List[Torrent]] = {}
+
+    for t in torrents:
+        m = tag_pattern.search(t.name)
+        if m:
+            tag = m.group(1).upper()
+            if tag not in groups:
+                groups[tag] = []
+            groups[tag].append(t)
+
+    significant = {tag: t_list for tag, t_list in groups.items() if len(t_list) >= 2}
+    if len(significant) >= 2:
+        return significant
+    return {}
 

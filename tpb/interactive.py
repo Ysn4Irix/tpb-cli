@@ -31,6 +31,8 @@ from tpb.parser import (
     get_season_packs,
     detect_quality,
     get_episode_quality_variants,
+    get_detected_seasons_summary,
+    detect_series_variants,
 )
 from tpb.exporter import render_torrents_table, render_magnet_list, export_magnets_to_file
 
@@ -135,12 +137,14 @@ class InteractiveSession:
             sys.exit(0)
 
     def handle_tv_flow(self) -> None:
-        """Workflow for finding and downloading TV show seasons/episodes with instant back navigation."""
+        """Workflow for finding and downloading TV show seasons/episodes with instant search and auto-detected seasons."""
         step = 1
         show_name = ""
         season_num = 1
         quality_pref = "1080p"
-        torrents: List[Torrent] = []
+        all_torrents: List[Torrent] = []
+        filtered_torrents: List[Torrent] = []
+        series_variants: dict = {}
         season_packs: List[Torrent] = []
         episodes_map: dict = {}
         selected_torrents: List[Torrent] = []
@@ -150,7 +154,7 @@ class InteractiveSession:
             if step == 1:
                 # Step 1: Show title
                 val = inquirer.text(
-                    message="Enter TV show title (e.g. Severance, Breaking Bad):",
+                    message="Enter TV show title (e.g. Severance, Breaking Bad, The Office):",
                     default=show_name,
                     instruction="(Esc, 'b', or 'q': go back)",
                     mandatory=False,
@@ -169,30 +173,182 @@ class InteractiveSession:
                 step = 2
 
             elif step == 2:
-                # Step 2: Season number
-                val = inquirer.text(
-                    message="Enter Season number:",
-                    default=str(season_num),
-                    instruction="(Esc, 'b', or 'q': go back)",
-                    mandatory=False,
-                    keybindings=TEXT_BACK_KEYBINDINGS,
-                ).execute()
+                # Step 2: Immediate Search & Result Discovery (uses in-memory cache)
+                cache_key_hd = (show_name.lower(), CAT_TV_HD)
+                cache_key_all = (show_name.lower(), "")
+                if cache_key_hd in self.client._cache:
+                    all_torrents = self.client.search(show_name, category=CAT_TV_HD)
+                elif cache_key_all in self.client._cache:
+                    all_torrents = self.client.search(show_name)
+                else:
+                    with console.status(f"[cyan]Searching Apibay for '[bold]{show_name}[/bold]'...[/cyan]", spinner="dots"):
+                        try:
+                            all_torrents = self.client.search(show_name, category=CAT_TV_HD)
+                            if not all_torrents:
+                                all_torrents = self.client.search(show_name)
+                        except ApibayError as err:
+                            console.print(f"[bold red]Search Error:[/] {err}")
+                            step = 1
+                            continue
 
-                if is_back(val):
+                if not all_torrents:
+                    console.print(f"[yellow]No results found on Apibay for '{show_name}'.[/yellow]")
                     step = 1
                     continue
 
-                if not val.strip().isdigit() or int(val.strip()) <= 0:
-                    console.print("[red]Please enter a valid positive number.[/red]")
+                # Check if multiple series variants are detected (e.g. US vs UK)
+                series_variants = detect_series_variants(all_torrents)
+                if series_variants:
+                    step = 25  # Series Disambiguation
+                else:
+                    filtered_torrents = all_torrents
+                    step = 3  # Auto-Detected Seasons Selector
+
+            elif step == 25:
+                # Step 25: Series Disambiguation (e.g. The Office US vs UK)
+                variant_choices = [
+                    Choice(tag, f"📺 {show_name} ({tag}) [{len(v_list)} releases]")
+                    for tag, v_list in sorted(series_variants.items())
+                ]
+                variant_choices.append(Choice("all", f"🌐 All / Mixed versions [{len(all_torrents)} releases]"))
+                variant_choices.append(Separator())
+                variant_choices.append(Choice("back", "⬅️ Go Back [b / Esc / ←]"))
+
+                console.print(f"\n[cyan][INFO] Multiple series versions detected for '{show_name}'.[/cyan]")
+                v_choice = inquirer.select(
+                    message=f"Select which series version you want:",
+                    choices=variant_choices,
+                    default=variant_choices[0].value,
+                    instruction="(b / Esc / ←: go back)",
+                    mandatory=False,
+                    keybindings=SELECT_BACK_KEYBINDINGS,
+                ).execute()
+
+                if is_back(v_choice):
+                    step = 1
                     continue
 
-                season_num = int(val.strip())
+                if v_choice != "all" and v_choice in series_variants:
+                    filtered_torrents = series_variants[v_choice]
+                else:
+                    filtered_torrents = all_torrents
+
                 step = 3
 
             elif step == 3:
-                # Step 3: Quality preference
+                # Step 3: Interactive Season Selector (Auto-Detected from Search Results)
+                seasons_summary = get_detected_seasons_summary(filtered_torrents)
+
+                if seasons_summary:
+                    season_choices = []
+                    for s_num, s_info in seasons_summary.items():
+                        eps_n = len(s_info["episodes"])
+                        packs_n = len(s_info["packs"])
+                        tot_n = s_info["total_torrents"]
+                        desc_parts = []
+                        if eps_n:
+                            desc_parts.append(f"{eps_n} episode{'s' if eps_n > 1 else ''}")
+                        if packs_n:
+                            desc_parts.append(f"{packs_n} pack{'s' if packs_n > 1 else ''}")
+                        if not desc_parts:
+                            desc_parts.append(f"{tot_n} release{'s' if tot_n > 1 else ''}")
+                        desc_str = f" ({', '.join(desc_parts)})"
+                        season_choices.append(Choice(s_num, f"📺 Season {s_num}{desc_str}"))
+
+                    season_choices.append(Separator())
+                    season_choices.append(Choice("manual", "✏️ Enter another season number manually"))
+                    season_choices.append(Choice("back", "⬅️ Go Back [b / Esc / ←]"))
+
+                    console.print(
+                        f"\n[bold green][OK] Found {len(filtered_torrents)} releases across "
+                        f"{len(seasons_summary)} detected season(s) for '{show_name}':[/bold green]"
+                    )
+
+                    default_season = season_num if season_num in seasons_summary else next(iter(seasons_summary.keys()))
+                    s_choice = inquirer.select(
+                        message="Select Season:",
+                        choices=season_choices,
+                        default=default_season,
+                        instruction="(b / Esc / ←: go back)",
+                        mandatory=False,
+                        keybindings=SELECT_BACK_KEYBINDINGS,
+                    ).execute()
+
+                    if is_back(s_choice):
+                        step = 25 if series_variants else 1
+                        continue
+
+                    if s_choice == "manual":
+                        val = inquirer.text(
+                            message="Enter Season number:",
+                            default=str(season_num),
+                            instruction="(Esc, 'b', or 'q': go back)",
+                            mandatory=False,
+                            keybindings=TEXT_BACK_KEYBINDINGS,
+                        ).execute()
+
+                        if is_back(val):
+                            continue  # Re-prompt season selector
+
+                        if not val.strip().isdigit() or int(val.strip()) <= 0:
+                            console.print("[red]Please enter a valid positive number.[/red]")
+                            continue
+
+                        season_num = int(val.strip())
+                    else:
+                        season_num = int(s_choice)
+
+                    step = 4
+
+                else:
+                    # No structured seasons detected
+                    console.print(
+                        f"[yellow]Could not automatically detect standard season tags in {len(filtered_torrents)} releases for '{show_name}'.[/yellow]"
+                    )
+                    no_s_choices = [
+                        Choice("manual", "✏️ Enter season number manually"),
+                        Choice("browse", "📋 Browse all releases for manual selection"),
+                        Separator(),
+                        Choice("back", "⬅️ Go Back [b / Esc / ←]"),
+                    ]
+                    s_choice = inquirer.select(
+                        message="How would you like to proceed?",
+                        choices=no_s_choices,
+                        instruction="(b / Esc / ←: go back)",
+                        mandatory=False,
+                        keybindings=SELECT_BACK_KEYBINDINGS,
+                    ).execute()
+
+                    if is_back(s_choice):
+                        step = 25 if series_variants else 1
+                        continue
+
+                    if s_choice == "browse":
+                        render_torrents_table(filtered_torrents[:25], title=f"All Results for '{show_name}'")
+                        step = 7  # Manual multi-select
+                    else:
+                        val = inquirer.text(
+                            message="Enter Season number:",
+                            default=str(season_num),
+                            instruction="(Esc, 'b', or 'q': go back)",
+                            mandatory=False,
+                            keybindings=TEXT_BACK_KEYBINDINGS,
+                        ).execute()
+
+                        if is_back(val):
+                            continue
+
+                        if not val.strip().isdigit() or int(val.strip()) <= 0:
+                            console.print("[red]Please enter a valid positive number.[/red]")
+                            continue
+
+                        season_num = int(val.strip())
+                        step = 4
+
+            elif step == 4:
+                # Step 4: Quality preference
                 val = inquirer.select(
-                    message="Select preferred quality:",
+                    message=f"Select preferred quality for Season {season_num}:",
                     choices=[
                         Choice("Any", "✨ Any Quality (Best seeded)"),
                         Choice("1080p", "💎 1080p (Full HD)"),
@@ -209,34 +365,15 @@ class InteractiveSession:
                 ).execute()
 
                 if is_back(val):
-                    step = 2
+                    step = 3
                     continue
 
                 quality_pref = val
-                step = 4
 
-            elif step == 4:
-                # Step 4: Fast Search & episode resolution (uses in-memory cache)
-                cache_key = (show_name.lower(), "")
-                if cache_key in self.client._cache:
-                    torrents = self.client.search(show_name)
-                else:
-                    with console.status(f"[cyan]Searching Apibay for '[bold]{show_name}[/bold]'...[/cyan]", spinner="dots"):
-                        try:
-                            torrents = self.client.search(show_name)
-                        except ApibayError as err:
-                            console.print(f"[bold red]Search Error:[/] {err}")
-                            step = 1
-                            continue
-
-                if not torrents:
-                    console.print(f"[yellow]No results found on Apibay for '{show_name}'.[/yellow]")
-                    step = 1
-                    continue
-
-                season_packs = get_season_packs(torrents, season_num)
+                # Resolve packs and episodes
+                season_packs = get_season_packs(filtered_torrents, season_num)
                 episodes_map = filter_and_group_episodes(
-                    torrents,
+                    filtered_torrents,
                     target_season=season_num,
                     preferred_quality=None if quality_pref == "Any" else quality_pref,
                 )
@@ -251,7 +388,7 @@ class InteractiveSession:
                         f"[yellow]Could not find specific Season {season_num} episodes for '{show_name}'.[/yellow]\n"
                         f"[dim]Tip: Showing all search results so you can manually select releases:[/dim]"
                     )
-                    render_torrents_table(torrents[:20], title=f"All Results for '{show_name}'")
+                    render_torrents_table(filtered_torrents[:20], title=f"All Results for '{show_name}'")
                     step = 7  # Manual multi-select
 
             elif step == 5:
@@ -275,7 +412,7 @@ class InteractiveSession:
                 ).execute()
 
                 if is_back(choice_type):
-                    step = 3  # Return to quality preference
+                    step = 4  # Return to quality preference
                     continue
 
                 if choice_type == "pack":
@@ -287,7 +424,7 @@ class InteractiveSession:
                 # Step 6: Select individual episodes
                 res = self._select_episodes_flow(episodes_map, show_name, season_num)
                 if is_back(res):
-                    step = 5 if season_packs else 3
+                    step = 5 if season_packs else 4
                     continue
 
                 if not res:
@@ -300,9 +437,9 @@ class InteractiveSession:
 
             elif step == 7:
                 # Step 7: Manual multi-select
-                res = self._manual_multi_select(torrents[:20])
+                res = self._manual_multi_select(filtered_torrents[:20])
                 if is_back(res):
-                    step = 3
+                    step = 4
                     continue
 
                 if not res:

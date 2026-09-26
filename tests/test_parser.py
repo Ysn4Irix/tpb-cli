@@ -119,3 +119,41 @@ def test_get_episode_quality_variants():
     # The first 1080p x264 should be top-seeded
     assert variants[0].id == "1"
 
+
+def test_get_detected_seasons_summary():
+    from tpb.parser import get_detected_seasons_summary
+
+    t1 = Torrent(id="1", name="Show.S01E01.1080p", info_hash="11", leechers=1, seeders=100, size_bytes=1000)
+    t2 = Torrent(id="2", name="Show.S01E02.1080p", info_hash="22", leechers=1, seeders=80, size_bytes=1000)
+    t3 = Torrent(id="3", name="Show.Season.1.Complete.720p", info_hash="33", leechers=1, seeders=200, size_bytes=5000)
+    t4 = Torrent(id="4", name="Show.S02E01.720p", info_hash="44", leechers=1, seeders=50, size_bytes=1000)
+
+    summary = get_detected_seasons_summary([t1, t2, t3, t4])
+
+    assert 1 in summary
+    assert 2 in summary
+    assert len(summary[1]["episodes"]) == 2  # ep 1 and 2
+    assert len(summary[1]["packs"]) == 1      # 1 complete pack
+    assert summary[1]["total_torrents"] == 3
+    assert len(summary[2]["episodes"]) == 1  # ep 1
+    assert len(summary[2]["packs"]) == 0
+
+
+def test_detect_series_variants():
+    from tpb.parser import detect_series_variants
+
+    us_1 = Torrent(id="1", name="The.Office.US.S01E01.1080p", info_hash="1", leechers=1, seeders=10, size_bytes=100)
+    us_2 = Torrent(id="2", name="The.Office.US.S02E01.1080p", info_hash="2", leechers=1, seeders=10, size_bytes=100)
+    uk_1 = Torrent(id="3", name="The.Office.UK.S01E01.720p", info_hash="3", leechers=1, seeders=10, size_bytes=100)
+    uk_2 = Torrent(id="4", name="The.Office.UK.S02E01.720p", info_hash="4", leechers=1, seeders=10, size_bytes=100)
+
+    variants = detect_series_variants([us_1, us_2, uk_1, uk_2])
+    assert "US" in variants
+    assert "UK" in variants
+    assert len(variants["US"]) == 2
+    assert len(variants["UK"]) == 2
+
+    # Single variant should return empty
+    assert detect_series_variants([us_1, us_2]) == {}
+
+
