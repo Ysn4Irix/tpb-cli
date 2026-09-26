@@ -61,6 +61,8 @@ You will be guided through:
 4. Interactive episode selection menu (`[Space]` to toggle, `[a]` to select all, `[Enter]` to confirm).
 5. Output destination (Save to file with smart name `<show>_S<season>_magnets.txt` and/or print to terminal).
 
+> 💡 **Go Back Navigation**: Press **`[Esc]`** (or select **`⬅️ Go Back`**, or type **`b`** in text prompts, or press **`[q]`** in checkbox lists) at any point to return to the previous screen without exiting the app.
+
 ---
 
 ### 2. Scripted / Automation Flags
