@@ -1,44 +1,68 @@
 # tpb-cli 🏴‍☠️
 
-Interactive Python CLI application for searching movies and TV series and batch-exporting magnet links using the **apibay.org** (The Pirate Bay) API.
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-24%20Passed-brightgreen.svg)]()
+[![Code Style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
+A fast, interactive Python CLI and automation tool for searching movies and TV series, selecting episodes/seasons across quality releases, and batch-exporting magnet links via the **apibay.org** (The Pirate Bay) backend.
 
 ---
 
 ## ✨ Features
 
-- 📺 **TV Series & Season Batch Scraper**:
-  - Automatically identifies complete **Season Packs** or groups individual episodes (`E01`, `E02` ... `E24`).
-  - **Quality preference filtering** (`1080p`, `720p`, `2160p/4K`, `480p`, or `Any`).
-  - **Multi-Quality Episode Picker**: Displays all available qualities (1080p, 720p, 2160p, x265, etc.) under each episode section header, pre-checking the recommended one while allowing you to manually switch or select alternate qualities.
-  - Auto-selects the highest-seeded release per episode with an interactive multi-select checkbox menu to review, toggle, and customize episodes.
-- 🎬 **Movie Search & Selection**:
-  - Search any movie title, view seeders/leechers, file size, codec, and release group in a colorized table.
-- ⚡ **Hybrid Mode**:
-  - **Interactive TUI**: Arrow-key menus, fuzzy search, and multi-select checkboxes when run with no arguments.
-  - **Scriptable CLI Flags**: Automate batch exports directly from terminal or bash scripts.
-- 💾 **Export & Output**:
-  - Save to text file (`.txt`) with smart default naming (`<show_name>_S<season>_magnets.txt`) and collision handling (overwrite/append).
-  - Print formatted magnet links directly to terminal.
-  - Magnet links pre-populated with high-uptime public trackers for instant discovery.
-- 🛡️ **Network Resilience**:
-  - Custom proxy support (`--proxy HTTP/SOCKS5`) and configurable mirrors (`--api-url`).
-  - Native handling for empty results and connection timeouts.
+- 🔍 **Immediate Search & Discovery**:
+  - Automatically queries the backend immediately after you enter a show title.
+  - Scans results upfront to determine total releases, codecs, and qualities.
+- 📺 **Auto-Detected Season Selector**:
+  - Analyzes search results to detect all available seasons.
+  - Displays episode counts and complete pack counts for each season (e.g., `Season 1 (10 episodes, 3 packs)`), eliminating guesswork.
+- 🌐 **Series Disambiguation**:
+  - Automatically identifies regional variants (e.g., *The Office US* vs *The Office UK*) and prompts you to select the exact version you want.
+- 🎛️ **Multi-Quality Episode Picker**:
+  - Groups results by episode number (`E01`, `E02`, ...).
+  - Pre-selects the healthiest release per episode by default.
+  - Allows switching or selecting alternate qualities (`1080p`, `720p`, `2160p / 4K`, SD, `x265`, `x264`) directly from an interactive checklist.
+- 📦 **Season Packs vs Individual Episodes**:
+  - Detects full season packs and lets you grab a complete pack in one click or pick and choose individual episodes.
+- 🎬 **Movie Search & High-Quality Filters**:
+  - Fast search with rich metadata tables (seeders, leechers, file size, codec, VIP/Trusted uploader tags).
+- ⚡ **Zero-Lag Back Navigation**:
+  - Press `Esc`, `b`, `q`, or `←` at any step to instantly return to the previous screen (configured with sub-10ms key sequence timeouts).
+  - In-memory query caching ensures backing up doesn't repeat slow network requests.
+- 💾 **Smart Export Workflows**:
+  - Save magnet links to text files (`.txt`) with pre-filled smart filenames (e.g., `breaking_bad_S01_magnets.txt`).
+  - File collision resolution: overwrite or append to existing link lists.
+  - Print links directly to the terminal or both save and print.
+  - High-reliability public trackers are automatically embedded in generated magnet links.
+- 🛡️ **Scriptable & Resilient**:
+  - Run interactively (TUI) or automate batch exports using CLI flags.
+  - Custom proxy support (HTTP / SOCKS5) and custom API base URLs.
+  - CP1252-safe console rendering for Windows terminals.
 
 ---
 
 ## 🚀 Installation
 
+### Prerequisites
+- Python 3.10 or higher
+- Git
+
+### Setup
+
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/tpb-cli.git
+git clone https://github.com/Ysn4Irix/tpb-cli.git
 cd tpb-cli
 
 # Install dependencies
 pip install -r requirements.txt
 
-# (Optional) Install in editable mode for the 'tpb' command
+# Install in editable mode for the 'tpb' executable command
 pip install -e .
 ```
+
+After installation, the `tpb` command will be globally accessible in your terminal.
 
 ---
 
@@ -46,47 +70,58 @@ pip install -e .
 
 ### 1. Interactive Mode (Default)
 
-Simply launch `tpb`:
+Simply run `tpb` without arguments:
 
 ```bash
-python -m tpb.cli
-# or if installed with pip -e:
 tpb
 ```
 
-You will be guided through:
-1. Search mode selection (TV Series, Movie, or General Search).
-2. Title entry and Season number.
-3. Quality preference filter (`1080p`, `720p`, `2160p`, `Any`).
-4. Interactive episode selection menu (`[Space]` to toggle, `[a]` to select all, `[Enter]` to confirm).
-5. Output destination (Save to file with smart name `<show>_S<season>_magnets.txt` and/or print to terminal).
+Or via Python module:
+```bash
+python -m tpb.cli
+```
 
-> 💡 **Go Back Navigation**: Press **`[Esc]`** (or select **`⬅️ Go Back`**, or type **`b`** in text prompts, or press **`[q]`** in checkbox lists) at any point to return to the previous screen without exiting the app.
+#### Step-by-Step Flow:
+1. **Choose Category**: Select between **TV Series**, **Movies**, or **General Search**.
+2. **Enter Title**: Type in the show or movie title (e.g., `Severance`, `The Office`).
+3. **Disambiguation (if applicable)**: If multiple series versions exist (e.g., US vs UK), choose your preferred version.
+4. **Select Season**: Pick from auto-detected seasons with release statistics.
+5. **Quality Filter**: Filter by `1080p`, `720p`, `2160p`, or `Any`.
+6. **Pack or Episodes**: Grab a complete Season Pack or select individual episodes.
+7. **Episode Checklist**: Use `[Space]` to toggle, `[a]` to select all, and `[Enter]` to confirm.
+8. **Export**: Save to file and/or print magnet links to the terminal.
+
+> 💡 **Navigation Tip**: Press **`Esc`**, **`b`**, **`q`**, or **`←`** anytime to jump back to the previous menu step.
 
 ---
 
-### 2. Scripted / Automation Flags
+### 2. Scriptable CLI Mode
 
-You can bypass interactive prompts completely by passing flags:
+You can automate search and export directly using CLI flags:
 
-#### Export entire season to a file:
+#### Download complete season to a text file:
 ```bash
-python -m tpb.cli "Severance" -s 1 -q 1080p -o severance_s1.txt
+tpb "Severance" -s 1 -q 1080p -o severance_s1.txt
 ```
 
 #### Prefer complete season pack if available:
 ```bash
-python -m tpb.cli "Breaking Bad" -s 1 --pack -o bb_s1.txt
+tpb "Breaking Bad" -s 1 --pack -o bb_s1.txt
 ```
 
 #### Search movie and print top magnet link to console:
 ```bash
-python -m tpb.cli "Inception" -q 1080p --print
+tpb "Inception" -q 1080p --print
+```
+
+#### Append search results to an existing link file:
+```bash
+tpb "Better Call Saul" -s 1 -q 720p -o series_links.txt
 ```
 
 #### Use a custom mirror or SOCKS5 proxy:
 ```bash
-python -m tpb.cli "The Matrix" --proxy "socks5://127.0.0.1:9050" --api-url "https://apibay.org"
+tpb "The Matrix" --proxy "socks5://127.0.0.1:9050" --api-url "https://apibay.org"
 ```
 
 ---
@@ -94,22 +129,49 @@ python -m tpb.cli "The Matrix" --proxy "socks5://127.0.0.1:9050" --api-url "http
 ## 🛠️ CLI Options Reference
 
 | Flag | Long Flag | Description |
-|------|-----------|-------------|
-| `query` | | Search query (movie or TV title). If omitted, opens interactive menu. |
+| :--- | :--- | :--- |
+| `query` | | Search query string (movie or TV title). Omit to launch interactive mode. |
 | `-s` | `--season` | TV Show season number (e.g. `1`, `2`). |
-| `-q` | `--quality` | Resolution filter: `2160p`, `1080p`, `720p`, `480p`, `any`. |
-| `-o` | `--output` | Destination path for `.txt` magnet list. |
-| `-p` | `--print` | Print magnet links to terminal. |
-| | `--pack` | Prefer complete season pack if available. |
-| `-i` | `--interactive` | Force interactive menu even if query is passed. |
-| | `--api-url` | Custom Apibay API base URL. |
-| | `--proxy` | HTTP/SOCKS5 proxy URL. |
-| `-v` | `--version` | Show program version. |
-| `-h` | `--help` | Display help screen. |
+| `-q` | `--quality` | Resolution preference: `2160p`, `1080p`, `720p`, `480p`, or `any`. |
+| `-o` | `--output` | Destination file path to save magnet links (`.txt`). |
+| `-p` | `--print` | Print magnet links to terminal stdout. |
+| | `--pack` | Prefer complete season pack over individual episodes. |
+| `-i` | `--interactive` | Force interactive TUI even if a query argument was passed. |
+| | `--api-url` | Custom Apibay backend URL (Default: `https://apibay.org`). |
+| | `--proxy` | HTTP or SOCKS5 proxy URL (e.g. `socks5://127.0.0.1:9050`). |
+| `-v` | `--version` | Display program version and exit. |
+| `-h` | `--help` | Show command line options and help message. |
+
+---
+
+## 📁 Project Architecture
+
+```
+tpb-cli/
+├── tpb/
+│   ├── __init__.py        # Package initialization & version metadata
+│   ├── api.py             # ApibayClient, HTTP requests, caching & error handling
+│   ├── cli.py             # Argument parsing and headless automation entrypoint
+│   ├── exporter.py        # File export, magnet formatters & Rich tables
+│   ├── interactive.py     # Interactive TUI, state machine & 0ms back navigation
+│   ├── models.py          # Torrent dataclass, properties & model coercion
+│   └── parser.py          # Regex parsers for seasons, episodes, quality & codecs
+├── tests/
+│   ├── test_api.py        # API client and response mocking tests
+│   ├── test_exporter.py   # File writer & dict resilience tests
+│   ├── test_interactive.py# Navigation, series disambiguation & prompt tests
+│   ├── test_models.py     # Dataclass properties & tracker verification
+│   └── test_parser.py     # TV metadata extraction & episode grouping tests
+├── pyproject.toml         # Build configuration & dependencies
+├── requirements.txt       # Direct runtime dependencies
+└── README.md              # Project documentation
+```
 
 ---
 
 ## 🧪 Running Tests
+
+The test suite contains 24 automated unit tests covering API queries, metadata parsing, interactive state transitions, and file exports:
 
 ```bash
 pytest -v
@@ -117,5 +179,18 @@ pytest -v
 
 ---
 
+## 🤝 Contributing
+
+Contributions, issues, and feature requests are welcome!
+1. Fork the project.
+2. Create your feature branch (`git checkout -b feature/amazing-feature`).
+3. Commit your changes (`git commit -m "feat: add amazing feature"`).
+4. Run tests (`pytest -v`).
+5. Push to the branch (`git push origin feature/amazing-feature`).
+6. Open a Pull Request.
+
+---
+
 ## 📄 License
-MIT
+
+This project is licensed under the [MIT License](LICENSE).
