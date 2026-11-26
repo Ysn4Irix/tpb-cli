@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
-from typing import List, Optional
 
 from tpb.api import DEFAULT_BASE_URL
 
@@ -58,11 +57,11 @@ class BookmarkItem:
 class AppStateStore:
     """Loads and persists GUI preferences, search history, and bookmarks."""
 
-    def __init__(self, config_path: Optional[Path] = None):
+    def __init__(self, config_path: Path | None = None):
         self.config_path = config_path or get_default_config_path()
         self.settings = GuiSettings()
-        self.history: List[HistoryEntry] = []
-        self.bookmarks: List[BookmarkItem] = []
+        self.history: list[HistoryEntry] = []
+        self.bookmarks: list[BookmarkItem] = []
         self.load()
 
     def load(self) -> None:
@@ -83,10 +82,13 @@ class AppStateStore:
             theme = str(raw_settings.get("theme", "dark")).lower()
             self.settings = GuiSettings(
                 theme="light" if theme == "light" else "dark",
-                api_url=str(raw_settings.get("api_url") or DEFAULT_BASE_URL).strip() or DEFAULT_BASE_URL,
+                api_url=str(raw_settings.get("api_url") or DEFAULT_BASE_URL).strip()
+                or DEFAULT_BASE_URL,
                 proxy=str(raw_settings.get("proxy", "")).strip(),
                 default_quality=str(raw_settings.get("default_quality", "1080p")) or "1080p",
-                last_export_dir=str(raw_settings.get("last_export_dir") or get_default_export_dir()),
+                last_export_dir=str(
+                    raw_settings.get("last_export_dir") or get_default_export_dir()
+                ),
                 max_history=max(5, int(raw_settings.get("max_history", 25))),
             )
 

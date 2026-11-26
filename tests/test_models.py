@@ -1,4 +1,4 @@
-import pytest
+import urllib.parse
 from tpb.models import Torrent, DEFAULT_TRACKERS
 
 
@@ -18,7 +18,7 @@ def test_torrent_magnet_generation():
     assert magnet.startswith("magnet:?xt=urn:btih:ABCDEF1234567890ABCDEF1234567890ABCDEF12")
     assert "dn=Severance%20S01E01%201080p" in magnet
     for tracker in DEFAULT_TRACKERS[:2]:
-        assert "tr=" in magnet
+        assert f"tr={urllib.parse.quote(tracker)}" in magnet
     assert torrent.is_vip is True
     assert torrent.is_trusted is False
     assert "GiB" in torrent.human_size

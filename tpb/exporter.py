@@ -1,11 +1,12 @@
 """Export utilities for magnet links and terminal rendering."""
 
 from pathlib import Path
-from typing import List, Optional, Sequence, Any
+from typing import Any
+from collections.abc import Sequence
 from rich.console import Console
 from rich.table import Table
 
-from tpb.models import Torrent, ensure_torrents
+from tpb.models import ensure_torrents
 
 # Force UTF-8 safe rendering
 console = Console()
@@ -67,7 +68,9 @@ def render_magnet_list(torrents: Sequence[Any]) -> None:
 
     console.print("\n[bold cyan]==== Magnet Links ====[/bold cyan]")
     for idx, t in enumerate(torrents, 1):
-        console.print(f"[bold yellow]#{idx} {t.name}[/bold yellow] ({t.human_size}, {t.seeders} seeds)")
+        console.print(
+            f"[bold yellow]#{idx} {t.name}[/bold yellow] ({t.human_size}, {t.seeders} seeds)"
+        )
         console.print(f"[dim]{t.magnet_link}[/dim]\n")
 
 

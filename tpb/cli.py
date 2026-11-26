@@ -1,20 +1,23 @@
 """Command-line entrypoint supporting both interactive mode and scripted flags."""
 
 import argparse
+import io
 import sys
 from pathlib import Path
 from rich.console import Console
 
 # Ensure UTF-8 output encoding on Windows if supported
-if hasattr(sys.stdout, "reconfigure"):
-    try:
+try:
+    if isinstance(sys.stdout, io.TextIOWrapper):
         sys.stdout.reconfigure(encoding="utf-8")
+    if isinstance(sys.stderr, io.TextIOWrapper):
         sys.stderr.reconfigure(encoding="utf-8")
-    except Exception:
-        pass
+except (AttributeError, OSError, ValueError):
+    # Some non-TTY or frozen hosts do not support stream reconfiguration.
+    pass
 
 from tpb import __version__
-from tpb.api import ApibayClient, ApibayError, CAT_TV, CAT_MOVIES, CAT_ALL
+from tpb.api import ApibayClient, ApibayError
 from tpb.parser import filter_and_group_episodes, get_season_packs
 from tpb.exporter import render_torrents_table, render_magnet_list, export_magnets_to_file
 
@@ -44,26 +47,30 @@ Examples:
         help="Search query (movie title or TV show name). If omitted, opens interactive menu.",
     )
     parser.add_argument(
-        "-s", "--season",
+        "-s",
+        "--season",
         type=int,
         default=None,
         help="TV Show season number to fetch (e.g. 1 or 2).",
     )
     parser.add_argument(
-        "-q", "--quality",
+        "-q",
+        "--quality",
         type=str,
         default=None,
         choices=["2160p", "1080p", "720p", "480p", "any"],
         help="Preferred video resolution (e.g. 1080p).",
     )
     parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         type=str,
         default=None,
         help="Path to output text file for saving magnet links.",
     )
     parser.add_argument(
-        "-p", "--print",
+        "-p",
+        "--print",
         dest="print_magnets",
         action="store_true",
         help="Print magnet links directly to the console.",
@@ -74,7 +81,8 @@ Examples:
         help="For TV seasons, export complete season pack if available instead of individual episodes.",
     )
     parser.add_argument(
-        "-i", "--interactive",
+        "-i",
+        "--interactive",
         action="store_true",
         help="Force interactive selection even if search query is provided.",
     )
@@ -96,7 +104,8 @@ Examples:
         help="Launch the PySide6 desktop graphical user interface.",
     )
     parser.add_argument(
-        "-v", "--version",
+        "-v",
+        "--version",
         action="version",
         version=f"tpb-cli {__version__}",
     )
@@ -143,9 +152,13 @@ def handle_scripted_run(args: argparse.Namespace) -> int:
         elif episodes_map:
             for ep_num in sorted(episodes_map.keys()):
                 selected_torrents.append(episodes_map[ep_num][0])
-            console.print(f"[green]Collected {len(selected_torrents)} episodes for Season {season_num}.[/green]")
+            console.print(
+                f"[green]Collected {len(selected_torrents)} episodes for Season {season_num}.[/green]"
+            )
         elif season_packs:
-            console.print(f"[green]No individual episodes found; using complete Season {season_num} pack.[/green]")
+            console.print(
+                f"[green]No individual episodes found; using complete Season {season_num} pack.[/green]"
+            )
             selected_torrents = [season_packs[0]]
         else:
             console.print(f"[yellow]No season {season_num} releases found for '{query}'.[/yellow]")
@@ -170,7 +183,9 @@ def handle_scripted_run(args: argparse.Namespace) -> int:
     if output_path:
         dest_file = Path(output_path)
         count = export_magnets_to_file(selected_torrents, dest_file)
-        console.print(f"[bold green]OK:[/] Exported {count} magnet link(s) to '{dest_file.resolve()}'")
+        console.print(
+            f"[bold green]OK:[/] Exported {count} magnet link(s) to '{dest_file.resolve()}'"
+        )
 
     if args.print_magnets:
         render_magnet_list(selected_torrents)

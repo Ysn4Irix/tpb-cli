@@ -19,11 +19,14 @@ from tpb.gui.views.results_table import TorrentResultsView
 from tpb.gui.views.tv_browser import TvBrowserView
 from tpb.gui.widgets.action_bar import ActionBar
 from tpb.gui.widgets.file_inspector import FileInspectorDrawer
+from tpb.gui.widgets.settings_dialog import SettingsDialog
 from tpb.models import Torrent, TorrentFile
 from tpb.parser import enrich_torrent_metadata
 
 
-def _torrent(tid: str, name: str, seeders: int = 50, size_bytes: int = 1024 * 1024 * 500) -> Torrent:
+def _torrent(
+    tid: str, name: str, seeders: int = 50, size_bytes: int = 1024 * 1024 * 500
+) -> Torrent:
     t = Torrent(
         id=tid,
         name=name,
@@ -71,6 +74,13 @@ def test_results_table_filter_sort_and_selection(qtbot):
     checked = view.checked_torrents()
     assert checked == [t1]
 
+    # Spacebar toggles current focused row cleanly
+    view.table.selectRow(0)
+    qtbot.keyClick(view.table, Qt.Key.Key_Space)
+    assert view.checked_torrents() == []
+    qtbot.keyClick(view.table, Qt.Key.Key_Space)
+    assert view.checked_torrents() == [t1]
+
     view.clear_selection()
     assert view.checked_torrents() == []
 
@@ -99,7 +109,11 @@ def test_tv_browser_disambiguation_seasons_and_single_quality_per_episode(qtbot)
     us_btn = next(b for b in view.variant_group.buttons() if "(US)" in b.text())
     us_btn.click()
 
-    # Season 1 should have 2 episodes and 1 pack
+    # All search results start unchecked by default
+    assert view.checked_torrents() == []
+
+    # Clicking Select Recommended selects top preferred 1080p release per episode
+    view.select_recommended_btn.click()
     checked = view.checked_torrents()
     assert len(checked) == 2
     assert checked[0].id == "1"  # Recommended 1080p for E01
@@ -109,15 +123,17 @@ def test_tv_browser_disambiguation_seasons_and_single_quality_per_episode(qtbot)
     ep1_parent = view.episode_tree.topLevelItem(0)
     assert ep1_parent.childCount() == 2
     alt_child = ep1_parent.child(1)
-    alt_child.setCheckState(0, Qt.Checked)
+    alt_child.setCheckState(0, Qt.CheckState.Checked)
 
     updated = view.checked_torrents()
     assert len(updated) == 2
     assert updated[0].id == "2"  # Switched cleanly without keeping duplicate E01 release
-    assert ep1_parent.child(0).checkState(0) == Qt.Unchecked
+    assert ep1_parent.child(0).checkState(0) == Qt.CheckState.Unchecked
 
-    # Switching to Season Packs shows Season 1 pack pre-checked
+    # Switching to Season Packs shows Season 1 pack unchecked by default
     view.packs_mode_btn.click()
+    assert view.checked_torrents() == []
+    view.fallback_table.select_visible()
     pack_checked = view.checked_torrents()
     assert len(pack_checked) == 1
     assert pack_checked[0].id == "4"
@@ -132,7 +148,9 @@ def test_file_inspector_states_and_retry(qtbot):
     inspector.show_loading(t)
     assert "Loading" in inspector.status_label.text()
 
-    inspector.show_files("77", [TorrentFile("Severance.S01E01.mkv", 2048), TorrentFile("subs.srt", 1024)])
+    inspector.show_files(
+        "77", [TorrentFile("Severance.S01E01.mkv", 2048), TorrentFile("subs.srt", 1024)]
+    )
     assert inspector.files_tree.topLevelItemCount() == 2
     assert "2 files" in inspector.status_label.text()
 
@@ -195,11 +213,11 @@ def test_main_window_integration_and_windowed_stdout_none(qtbot, tmp_path: Path)
         qtbot.addWidget(window)
         window.show()
 
-        # Simulate completed Movie search
+        # Simulate completed Movie search (unchecked by default)
         movie = _torrent("500", "Dune.Part.Two.2024.1080p.WEB.x265", seeders=450)
         window._on_search_completed("Dune Part Two", "movie", [movie])
         assert window.center_stack.currentIndex() == 2
-        assert window.action_bar._selected == [movie]
+        assert window.action_bar._selected == []
 
         # Simulate Theme toggle persistence
         window.toggle_theme()
@@ -223,10 +241,12 @@ def test_main_window_search_loading_cancel_and_error_states(qtbot, tmp_path: Pat
     qtbot.addWidget(window)
     window.show()
 
-    # Load an initial movie result so cancel restores index 2 and selection
+    # Load an initial movie result (unchecked by default), then explicitly select it
     movie = _torrent("501", "Arrival.2016.1080p.BluRay.x264", seeders=300)
     window._on_search_completed("Arrival", "movie", [movie])
     assert window.center_stack.currentIndex() == 2
+    assert window.action_bar._selected == []
+    window.table_view.model.toggle_row(0)
     assert window.action_bar._selected == [movie]
 
     # Trigger a new search -> enters loading state cleanly
@@ -265,3 +285,32 @@ def test_main_window_search_loading_cancel_and_error_states(qtbot, tmp_path: Pat
     assert window.status_progress.isVisible() is False
     assert "Connection timed out" in window.empty_message_label.text()
     assert window.retry_search_btn.isVisible() is True
+
+
+def test_settings_dialog_validates_urls_and_saves_cleanly(qtbot, tmp_path: Path):
+    store = AppStateStore(config_path=tmp_path / "settings_state.json")
+    dlg = SettingsDialog(store)
+    qtbot.addWidget(dlg)
+    dlg.show()
+
+    # Invalid URL is blocked with visible inline validation error
+    dlg.api_url_input.setText("ftp://bad-scheme.org")
+    dlg._on_save()
+    assert dlg.validation_label.isVisible() is True
+    assert "http://" in dlg.validation_label.text()
+    assert store.settings.api_url == "https://apibay.org"
+
+    # Invalid proxy is blocked
+    dlg.api_url_input.setText("https://mirror.example.org")
+    dlg.proxy_input.setText("javascript:alert(1)")
+    dlg._on_save()
+    assert dlg.validation_label.isVisible() is True
+
+    # Valid values persist cleanly
+    dlg.proxy_input.setText("socks5://127.0.0.1:9050")
+    dlg.theme_combo.setCurrentText("Light")
+    dlg._on_save()
+    assert dlg.validation_label.isVisible() is False
+    assert store.settings.api_url == "https://mirror.example.org"
+    assert store.settings.proxy == "socks5://127.0.0.1:9050"
+    assert store.settings.theme == "light"

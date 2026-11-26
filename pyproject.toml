@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tpb-cli"
-version = "0.1.0"
+version = "0.2.0"
 description = "Interactive Python CLI for searching movies and TV series magnet links via apibay.org"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -51,6 +51,11 @@ dev = [
     "pytest>=8.0.0",
     "pytest-qt>=4.4.0",
     "pyinstaller>=6.0.0",
+    "ruff>=0.8.0",
+    "mypy>=1.11.0",
+    "bandit>=1.7.0",
+    "pip-audit>=2.7.0",
+    "twine>=5.0.0",
 ]
 
 [project.urls]
@@ -72,3 +77,19 @@ exclude = ["tests*", ".agents*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+exclude = [".agents", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP"]
+ignore = ["E501", "E402"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+exclude = ["^\\.agents/", "^build/", "^dist/"]

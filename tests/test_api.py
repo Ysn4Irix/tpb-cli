@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from tpb.api import ApibayClient, ApibayError, ApibayConnectionError
+from tpb.api import ApibayClient, ApibayConnectionError
 import httpx
 
 

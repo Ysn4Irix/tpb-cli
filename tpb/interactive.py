@@ -1,14 +1,15 @@
 """Interactive TUI / terminal workflow using InquirerPy and Rich with high-speed go-back support."""
 
-import re
 import sys
 from pathlib import Path
-from typing import List, Optional, Any, Sequence
+from typing import Any
+from collections.abc import Sequence
 
 import prompt_toolkit.application.application
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice, InquirerPyUIListControl
 from InquirerPy.separator import Separator
+from InquirerPy.utils import InquirerPyKeybindings
 from rich.console import Console
 from rich.panel import Panel
 
@@ -19,10 +20,11 @@ _orig_app_init = prompt_toolkit.application.application.Application.__init__
 def _fast_app_init(self, *args, **kwargs):
     _orig_app_init(self, *args, **kwargs)
     self.ttimeoutlen = 0.005  # 5ms escape sequence timeout
-    self.timeoutlen = 0.005   # 5ms key sequence timeout
+    self.timeoutlen = 0.005  # 5ms key sequence timeout
 
 
-prompt_toolkit.application.application.Application.__init__ = _fast_app_init
+# Upstream prompt_toolkit workaround; method assignment triggers mypy [method-assign].
+prompt_toolkit.application.application.Application.__init__ = _fast_app_init  # type: ignore[method-assign]
 
 # Patch InquirerPy Choice handling: avoid dataclasses.asdict(choice) which recursively
 # decomposes nested dataclass instances (like Torrent) into plain dicts.
@@ -33,20 +35,21 @@ def _safe_get_choices(self, choices, default):
     if isinstance(choices, list):
         choices = [
             {"name": ch.name, "value": ch.value, "enabled": ch.enabled}
-            if isinstance(ch, Choice) else ch
+            if isinstance(ch, Choice)
+            else ch
             for ch in choices
         ]
     return _orig_get_choices(self, choices, default)
 
 
-InquirerPyUIListControl._get_choices = _safe_get_choices
+# Upstream InquirerPy workaround to preserve Torrent dataclass instances in Choice.value.
+InquirerPyUIListControl._get_choices = _safe_get_choices  # type: ignore[method-assign]
 
 from tpb.api import ApibayClient, ApibayError, CAT_TV_HD, CAT_MOVIES_HD, CAT_ALL
 from tpb.models import Torrent, ensure_torrents, sanitize_filename
 from tpb.parser import (
     filter_and_group_episodes,
     get_season_packs,
-    detect_quality,
     get_episode_quality_variants,
     get_detected_seasons_summary,
     detect_series_variants,
@@ -56,7 +59,7 @@ from tpb.exporter import render_torrents_table, render_magnet_list, export_magne
 console = Console()
 
 # Instant keybindings (0ms delay for single keys like 'b', 'q', 'left' and 10ms for 'escape')
-SELECT_BACK_KEYBINDINGS = {
+SELECT_BACK_KEYBINDINGS: InquirerPyKeybindings = {
     "skip": [
         {"key": "escape"},
         {"key": "c-c"},
@@ -66,7 +69,7 @@ SELECT_BACK_KEYBINDINGS = {
     ]
 }
 
-CHECKBOX_BACK_KEYBINDINGS = {
+CHECKBOX_BACK_KEYBINDINGS: InquirerPyKeybindings = {
     "skip": [
         {"key": "escape"},
         {"key": "c-c"},
@@ -76,7 +79,7 @@ CHECKBOX_BACK_KEYBINDINGS = {
     ]
 }
 
-TEXT_BACK_KEYBINDINGS = {
+TEXT_BACK_KEYBINDINGS: InquirerPyKeybindings = {
     "skip": [
         {"key": "escape"},
         {"key": "c-c"},
@@ -102,7 +105,7 @@ def is_back(val: Any) -> bool:
 class InteractiveSession:
     """Manages the interactive terminal session flow with full go-back support."""
 
-    def __init__(self, client: Optional[ApibayClient] = None):
+    def __init__(self, client: ApibayClient | None = None):
         self.client = client or ApibayClient()
 
     def run(self) -> None:
@@ -155,12 +158,12 @@ class InteractiveSession:
         show_name = ""
         season_num = 1
         quality_pref = "1080p"
-        all_torrents: List[Torrent] = []
-        filtered_torrents: List[Torrent] = []
+        all_torrents: list[Torrent] = []
+        filtered_torrents: list[Torrent] = []
         series_variants: dict = {}
-        season_packs: List[Torrent] = []
+        season_packs: list[Torrent] = []
         episodes_map: dict = {}
-        selected_torrents: List[Torrent] = []
+        selected_torrents: list[Torrent] = []
         selection_source: str = "episodes"
 
         while True:
@@ -194,7 +197,10 @@ class InteractiveSession:
                 elif cache_key_all in self.client._cache:
                     all_torrents = self.client.search(show_name)
                 else:
-                    with console.status(f"[cyan]Searching Apibay for '[bold]{show_name}[/bold]'...[/cyan]", spinner="dots"):
+                    with console.status(
+                        f"[cyan]Searching Apibay for '[bold]{show_name}[/bold]'...[/cyan]",
+                        spinner="dots",
+                    ):
                         try:
                             all_torrents = self.client.search(show_name, category=CAT_TV_HD)
                             if not all_torrents:
@@ -219,19 +225,24 @@ class InteractiveSession:
 
             elif step == 25:
                 # Step 25: Series Disambiguation (e.g. The Office US vs UK)
-                variant_choices = [
+                sorted_variants = sorted(series_variants.items())
+                variant_choices: list[Choice | Separator] = [
                     Choice(tag, f"📺 {show_name} ({tag}) [{len(v_list)} releases]")
-                    for tag, v_list in sorted(series_variants.items())
+                    for tag, v_list in sorted_variants
                 ]
-                variant_choices.append(Choice("all", f"🌐 All / Mixed versions [{len(all_torrents)} releases]"))
+                variant_choices.append(
+                    Choice("all", f"🌐 All / Mixed versions [{len(all_torrents)} releases]")
+                )
                 variant_choices.append(Separator())
                 variant_choices.append(Choice("back", "⬅️ Go Back [b / Esc / ←]"))
 
-                console.print(f"\n[cyan][INFO] Multiple series versions detected for '{show_name}'.[/cyan]")
+                console.print(
+                    f"\n[cyan][INFO] Multiple series versions detected for '{show_name}'.[/cyan]"
+                )
                 v_choice = inquirer.select(
-                    message=f"Select which series version you want:",
+                    message="Select which series version you want:",
                     choices=variant_choices,
-                    default=variant_choices[0].value,
+                    default=sorted_variants[0][0],
                     instruction="(b / Esc / ←: go back)",
                     mandatory=False,
                     keybindings=SELECT_BACK_KEYBINDINGS,
@@ -253,7 +264,7 @@ class InteractiveSession:
                 seasons_summary = get_detected_seasons_summary(filtered_torrents)
 
                 if seasons_summary:
-                    season_choices = []
+                    season_choices: list[Choice | Separator] = []
                     for s_num, s_info in seasons_summary.items():
                         eps_n = len(s_info["episodes"])
                         packs_n = len(s_info["packs"])
@@ -269,7 +280,9 @@ class InteractiveSession:
                         season_choices.append(Choice(s_num, f"📺 Season {s_num}{desc_str}"))
 
                     season_choices.append(Separator())
-                    season_choices.append(Choice("manual", "✏️ Enter another season number manually"))
+                    season_choices.append(
+                        Choice("manual", "✏️ Enter another season number manually")
+                    )
                     season_choices.append(Choice("back", "⬅️ Go Back [b / Esc / ←]"))
 
                     console.print(
@@ -277,7 +290,11 @@ class InteractiveSession:
                         f"{len(seasons_summary)} detected season(s) for '{show_name}':[/bold green]"
                     )
 
-                    default_season = season_num if season_num in seasons_summary else next(iter(seasons_summary.keys()))
+                    default_season = (
+                        season_num
+                        if season_num in seasons_summary
+                        else next(iter(seasons_summary.keys()))
+                    )
                     s_choice = inquirer.select(
                         message="Select Season:",
                         choices=season_choices,
@@ -337,7 +354,9 @@ class InteractiveSession:
                         continue
 
                     if s_choice == "browse":
-                        render_torrents_table(filtered_torrents[:25], title=f"All Results for '{show_name}'")
+                        render_torrents_table(
+                            filtered_torrents[:25], title=f"All Results for '{show_name}'"
+                        )
                         step = 7  # Manual multi-select
                     else:
                         val = inquirer.text(
@@ -392,7 +411,9 @@ class InteractiveSession:
                 )
 
                 if season_packs:
-                    console.print(f"\n[green][OK] Found {len(season_packs)} complete Season {season_num} pack(s)![/green]")
+                    console.print(
+                        f"\n[green][OK] Found {len(season_packs)} complete Season {season_num} pack(s)![/green]"
+                    )
                     step = 5  # Prompt pack vs episodes
                 elif episodes_map:
                     step = 6  # Directly to episode selector
@@ -401,7 +422,9 @@ class InteractiveSession:
                         f"[yellow]Could not find specific Season {season_num} episodes for '{show_name}'.[/yellow]\n"
                         f"[dim]Tip: Showing all search results so you can manually select releases:[/dim]"
                     )
-                    render_torrents_table(filtered_torrents[:20], title=f"All Results for '{show_name}'")
+                    render_torrents_table(
+                        filtered_torrents[:20], title=f"All Results for '{show_name}'"
+                    )
                     step = 7  # Manual multi-select
 
             elif step == 5:
@@ -409,12 +432,23 @@ class InteractiveSession:
                 choice_type = inquirer.select(
                     message=f"How would you like to grab Season {season_num}?",
                     choices=[
-                        Choice("episodes", f"📋 Select individual episodes ({len(episodes_map)} episode numbers detected)"),
-                        Choice("pack", f"📦 Grab a complete Season {season_num} pack ({season_packs[0].human_size})"),
+                        Choice(
+                            "episodes",
+                            f"📋 Select individual episodes ({len(episodes_map)} episode numbers detected)",
+                        ),
+                        Choice(
+                            "pack",
+                            f"📦 Grab a complete Season {season_num} pack ({season_packs[0].human_size})",
+                        ),
                         Separator(),
                         Choice("back", "⬅️ Go Back [b / Esc / ←]"),
-                    ] if episodes_map else [
-                        Choice("pack", f"📦 Grab a complete Season {season_num} pack ({season_packs[0].human_size})"),
+                    ]
+                    if episodes_map
+                    else [
+                        Choice(
+                            "pack",
+                            f"📦 Grab a complete Season {season_num} pack ({season_packs[0].human_size})",
+                        ),
                         Separator(),
                         Choice("back", "⬅️ Go Back [b / Esc / ←]"),
                     ],
@@ -465,10 +499,10 @@ class InteractiveSession:
 
             elif step == 8:
                 # Step 8: Select specific Season Pack
-                pack_choices = [
+                pack_choices: list[Choice | Separator] = [
                     Choice(
                         p,
-                        name=f"{p.name} ({p.quality}, {p.human_size}, {p.seeders} seeds, uploader: {p.username})"
+                        name=f"{p.name} ({p.quality}, {p.human_size}, {p.seeders} seeds, uploader: {p.username})",
                     )
                     for p in season_packs[:8]
                 ]
@@ -493,7 +527,9 @@ class InteractiveSession:
             elif step == 9:
                 # Step 9: Export destination workflow
                 default_filename = f"{sanitize_filename(show_name)}_S{season_num:02d}_magnets.txt"
-                completed = self._export_workflow(selected_torrents, default_filename=default_filename)
+                completed = self._export_workflow(
+                    selected_torrents, default_filename=default_filename
+                )
                 if completed:
                     break
                 else:
@@ -510,9 +546,9 @@ class InteractiveSession:
         episodes_map: dict,
         show_name: str,
         season_num: int,
-    ) -> Optional[List[Torrent]]:
+    ) -> list[Torrent] | None:
         """Allow user to review and check/uncheck episodes and pick between different quality variants."""
-        choices = []
+        choices: list[Choice | Separator] = []
         total_eps = len(episodes_map)
 
         for ep_num in sorted(episodes_map.keys()):
@@ -523,7 +559,7 @@ class InteractiveSession:
             choices.append(Separator(sep_text))
 
             for idx, variant in enumerate(variants):
-                is_default = (idx == 0)
+                is_default = idx == 0
                 default_tag = " [Default]" if is_default else ""
                 codec_tag = f" | {variant.codec}" if variant.codec != "Unknown" else ""
                 label = (
@@ -532,7 +568,9 @@ class InteractiveSession:
                 )
                 choices.append(Choice(variant, name=label, enabled=is_default))
 
-        console.print(f"\n[bold cyan]Found {total_eps} episode(s) for {show_name} Season {season_num}:[/bold cyan]")
+        console.print(
+            f"\n[bold cyan]Found {total_eps} episode(s) for {show_name} Season {season_num}:[/bold cyan]"
+        )
         console.print(
             "[dim]* Top release per episode is pre-checked [X] by default.\n"
             "* Different quality options are listed underneath -- use [Spacebar] to switch/toggle.\n"
@@ -552,7 +590,7 @@ class InteractiveSession:
 
         return selected or []
 
-    def _manual_multi_select(self, torrents: List[Torrent]) -> Optional[List[Torrent]]:
+    def _manual_multi_select(self, torrents: list[Torrent]) -> list[Torrent] | None:
         """Manual checkbox selection from a list of torrents."""
         choices = [
             Choice(
@@ -579,8 +617,8 @@ class InteractiveSession:
         """Workflow for searching movies with fast back navigation."""
         step = 1
         movie_title = ""
-        torrents: List[Torrent] = []
-        selected: Optional[List[Torrent]] = None
+        torrents: list[Torrent] = []
+        selected: list[Torrent] = []
 
         while True:
             if step == 1:
@@ -611,7 +649,10 @@ class InteractiveSession:
                 elif cache_key_all in self.client._cache:
                     torrents = self.client.search(movie_title)
                 else:
-                    with console.status(f"[cyan]Searching Apibay for '[bold]{movie_title}[/bold]'...[/cyan]", spinner="dots"):
+                    with console.status(
+                        f"[cyan]Searching Apibay for '[bold]{movie_title}[/bold]'...[/cyan]",
+                        spinner="dots",
+                    ):
                         try:
                             torrents = self.client.search(movie_title, category=CAT_MOVIES_HD)
                             if not torrents:
@@ -655,8 +696,8 @@ class InteractiveSession:
         """Workflow for general search across all categories with fast back navigation."""
         step = 1
         query = ""
-        torrents: List[Torrent] = []
-        selected: Optional[List[Torrent]] = None
+        torrents: list[Torrent] = []
+        selected: list[Torrent] = []
 
         while True:
             if step == 1:
@@ -684,7 +725,10 @@ class InteractiveSession:
                 if cache_key in self.client._cache:
                     torrents = self.client.search(query, category=CAT_ALL)
                 else:
-                    with console.status(f"[cyan]Searching Apibay for '[bold]{query}[/bold]'...[/cyan]", spinner="dots"):
+                    with console.status(
+                        f"[cyan]Searching Apibay for '[bold]{query}[/bold]'...[/cyan]",
+                        spinner="dots",
+                    ):
                         try:
                             torrents = self.client.search(query, category=CAT_ALL)
                         except ApibayError as err:
@@ -783,7 +827,7 @@ class InteractiveSession:
                     console.print("[yellow]File save cancelled.[/yellow]")
                     return False
                 else:
-                    append_mode = (conflict_action == "append")
+                    append_mode = conflict_action == "append"
                     count = export_magnets_to_file(torrents, dest_path, append=append_mode)
                     console.print(
                         f"[bold green][OK] Successfully exported {count} magnet link(s) to '{dest_path.resolve()}'![/bold green]"

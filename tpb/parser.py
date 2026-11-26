@@ -1,7 +1,6 @@
 """Parsing utilities for torrent titles, quality, codecs, and TV episodes."""
 
 import re
-from typing import Optional, List, Dict
 from tpb.models import Torrent
 
 QUALITY_PATTERNS = [
@@ -22,9 +21,7 @@ CODEC_PATTERNS = [
 EPISODE_REGEX_MULTI = re.compile(
     r"\b[sS](?P<season>\d{1,2})[eE](?P<ep_start>\d{1,2})(?:-[eE]?(?P<ep_end>\d{1,2}))?\b"
 )
-EPISODE_REGEX_X = re.compile(
-    r"\b(?P<season>\d{1,2})x(?P<ep_start>\d{1,2})\b"
-)
+EPISODE_REGEX_X = re.compile(r"\b(?P<season>\d{1,2})x(?P<ep_start>\d{1,2})\b")
 
 # Season pack matchers: "Season 1", "Season.1", "S01", "S1", "Season 01-05"
 SEASON_PACK_REGEX = re.compile(
@@ -106,17 +103,17 @@ def enrich_torrent_metadata(torrent: Torrent) -> Torrent:
 
 
 def filter_and_group_episodes(
-    torrents: List[Torrent],
+    torrents: list[Torrent],
     target_season: int,
-    preferred_quality: Optional[str] = None,
-) -> Dict[int, List[Torrent]]:
+    preferred_quality: str | None = None,
+) -> dict[int, list[Torrent]]:
     """
     Filter torrents matching target_season and group by episode number.
     Each episode's list is sorted by:
     1. Preferred quality match (if specified)
     2. Number of seeders (descending)
     """
-    episodes_map: Dict[int, List[Torrent]] = {}
+    episodes_map: dict[int, list[Torrent]] = {}
 
     for t in torrents:
         # Check if matches target season
@@ -133,8 +130,13 @@ def filter_and_group_episodes(
 
     # Sort candidates for each episode
     for ep in episodes_map:
+
         def sort_key(item: Torrent):
-            quality_score = 1 if (preferred_quality and preferred_quality.lower() in item.quality.lower()) else 0
+            quality_score = (
+                1
+                if (preferred_quality and preferred_quality.lower() in item.quality.lower())
+                else 0
+            )
             return (quality_score, item.seeders)
 
         episodes_map[ep].sort(key=sort_key, reverse=True)
@@ -142,26 +144,23 @@ def filter_and_group_episodes(
     return episodes_map
 
 
-def get_season_packs(torrents: List[Torrent], target_season: int) -> List[Torrent]:
+def get_season_packs(torrents: list[Torrent], target_season: int) -> list[Torrent]:
     """Return torrents that are full season packs for the target season."""
-    packs = [
-        t for t in torrents
-        if t.season == target_season and t.is_season_pack
-    ]
+    packs = [t for t in torrents if t.season == target_season and t.is_season_pack]
     packs.sort(key=lambda x: x.seeders, reverse=True)
     return packs
 
 
 def get_episode_quality_variants(
-    candidates: List[Torrent],
+    candidates: list[Torrent],
     max_variants: int = 5,
-) -> List[Torrent]:
+) -> list[Torrent]:
     """
     Extract distinct quality & codec variants for an episode,
     keeping the best-seeded release for each quality.
     """
     seen_keys = set()
-    variants: List[Torrent] = []
+    variants: list[Torrent] = []
 
     for t in candidates:
         key = (t.quality, t.codec)
@@ -183,7 +182,7 @@ def get_episode_quality_variants(
     return variants
 
 
-def get_detected_seasons_summary(torrents: List[Torrent]) -> Dict[int, dict]:
+def get_detected_seasons_summary(torrents: list[Torrent]) -> dict[int, dict]:
     """
     Scans a list of torrents and returns an ordered dictionary of detected seasons:
     {
@@ -198,7 +197,7 @@ def get_detected_seasons_summary(torrents: List[Torrent]) -> Dict[int, dict]:
         }
     }
     """
-    seasons: Dict[int, dict] = {}
+    seasons: dict[int, dict] = {}
     for t in torrents:
         if t.season is None:
             enrich_torrent_metadata(t)
@@ -232,14 +231,14 @@ def get_detected_seasons_summary(torrents: List[Torrent]) -> Dict[int, dict]:
     return dict(sorted(seasons.items()))
 
 
-def detect_series_variants(torrents: List[Torrent]) -> Dict[str, List[Torrent]]:
+def detect_series_variants(torrents: list[Torrent]) -> dict[str, list[Torrent]]:
     """
     Detect if search results contain distinct regional tags (e.g. US, UK, AU)
     where multiple variants have 2 or more releases.
     Returns: mapping tag -> list of torrents.
     """
     tag_pattern = re.compile(r"\b(US|UK|AU|NZ|CA)\b", re.IGNORECASE)
-    groups: Dict[str, List[Torrent]] = {}
+    groups: dict[str, list[Torrent]] = {}
 
     for t in torrents:
         m = tag_pattern.search(t.name)
@@ -253,4 +252,3 @@ def detect_series_variants(torrents: List[Torrent]) -> Dict[str, List[Torrent]]:
     if len(significant) >= 2:
         return significant
     return {}
-

@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from tpb.api import ApibayClient
+from tpb.api import ApibayClient, validate_http_url, validate_proxy_url
 from tpb.cli import build_parser, main as cli_main
 from tpb.gui.state import AppStateStore
 from tpb.models import TorrentFile, format_bytes, normalize_torrent_files, sanitize_filename
@@ -103,15 +103,37 @@ def test_shared_helpers():
     assert sanitize_filename("Mr. Robot (US)!") == "mr_robot_us"
 
 
+def test_url_and_proxy_boundary_validation():
+    assert validate_http_url("https://apibay.org/") == "https://apibay.org"
+    assert validate_proxy_url("  ") is None
+    assert validate_proxy_url("socks5://127.0.0.1:9050") == "socks5://127.0.0.1:9050"
+
+    with pytest.raises(ValueError):
+        validate_http_url("ftp://example.org")
+    with pytest.raises(ValueError):
+        validate_http_url("not-a-url")
+    with pytest.raises(ValueError):
+        validate_proxy_url("file:///etc/passwd")
+
+    client = ApibayClient()
+    client.reconfigure("http://localhost:8080/", "http://127.0.0.1:8888")
+    assert client.base_url == "http://localhost:8080"
+    assert client.proxy == "http://127.0.0.1:8888"
+
+
 def test_cli_gui_flag_parses_and_handles_missing_pyside6():
     parser = build_parser()
-    args = parser.parse_args(["--gui", "--api-url", "https://example.org", "--proxy", "http://127.0.0.1:8080"])
+    args = parser.parse_args(
+        ["--gui", "--api-url", "https://example.org", "--proxy", "http://127.0.0.1:8080"]
+    )
     assert args.gui is True
     assert args.api_url == "https://example.org"
     assert args.proxy == "http://127.0.0.1:8080"
 
-    with patch.object(sys, "argv", ["tpb", "--gui"]), \
-         patch.dict(sys.modules, {"tpb.gui.app": None}):
+    with (
+        patch.object(sys, "argv", ["tpb", "--gui"]),
+        patch.dict(sys.modules, {"tpb.gui.app": None}),
+    ):
         with pytest.raises(SystemExit) as exc_info:
             cli_main()
         assert exc_info.value.code == 1

@@ -64,7 +64,7 @@ pip install "tpb-cli[gui] @ git+https://github.com/Ysn4Irix/tpb-cli.git"
 
 Or install from a pre-built wheel:
 ```bash
-pip install tpb_cli-0.1.0-py3-none-any.whl
+pip install tpb_cli-0.2.0-py3-none-any.whl
 ```
 
 ### Option 2: Local / Development Install
@@ -93,7 +93,7 @@ tpb --gui
 ```
 
 ### Desktop GUI Highlights
-- **TV Series Browser**: Regional disambiguation chips (`US`, `UK`, `All`), auto-detected Season list with episode & pack counts, Season Packs table, and an interactive Episode Quality Matrix (top preferred release pre-checked; toggling an alternate quality automatically switches selection for that episode).
+- **TV Series Browser**: Regional disambiguation chips (`US`, `UK`, `All`), auto-detected Season list with episode & pack counts, Season Packs table, and an interactive Episode Quality Matrix (all results start unchecked by default, with a one-click Select Recommended action and automatic single-quality switching per episode).
 - **Movies & General Search**: Live-filterable and numerically sortable release table with VIP/Trusted uploader tags and resolution/codec indicators.
 - **Torrent File Inspector**: Click any release to asynchronously fetch and inspect internal file paths and sizes (`ApibayClient.get_files`).
 - **Batch Magnet Handoff**: Copy selected magnets to clipboard, launch staggered `magnet:` URIs in your default torrent client (with safety confirmation for large batches > 5), or export `.txt` with Overwrite/Append prompt.
@@ -192,9 +192,15 @@ tpb "The Matrix" --proxy "socks5://127.0.0.1:9050" --api-url "https://apibay.org
 
 ```
 tpb-cli/
+├── .github/workflows/
+│   ├── ci.yml             # Lint, format, typecheck, security, cross-OS tests & build
+│   └── release.yml        # Tagged release automation (.whl, .tar.gz & tpb-gui.exe)
+├── docs/
+│   ├── tpb-cli.md         # CLI design notes
+│   └── tpb-desktop-gui.md # Desktop GUI implementation plan & checklist
 ├── tpb/
 │   ├── __init__.py        # Package initialization & version metadata
-│   ├── api.py             # ApibayClient, thread-safe caching & file-list normalization
+│   ├── api.py             # ApibayClient, URL/proxy validation, cache lock & file normalization
 │   ├── cli.py             # Argument parsing, --gui launcher & headless automation
 │   ├── exporter.py        # File export, magnet formatters & Rich tables
 │   ├── interactive.py     # Interactive TUI, state machine & 0ms back navigation
@@ -202,10 +208,10 @@ tpb-cli/
 │   ├── parser.py          # Regex parsers for seasons, episodes, quality & codecs
 │   └── gui/               # Optional PySide6 desktop interface (pip install tpb-cli[gui])
 │       ├── app.py         # QApplication bootstrap & tpb-gui entrypoint
-│       ├── main_window.py # Desktop window shell, search bar & workspace orchestration
+│       ├── main_window.py # Desktop window shell, search bar, loading & workspace states
 │       ├── state.py       # Persistent settings, dark/light theme, history & bookmarks
 │       ├── theme.py       # Dark & Light QSS stylesheets and palette tokens
-│       ├── workers.py     # QThreadPool async workers with stale-request guards
+│       ├── workers.py     # QThreadPool async workers with cancellation & stale guards
 │       ├── views/         # TV Series browser & Movie/General sortable results table
 │       └── widgets/       # File Inspector, Magnet ActionBar, Library drawer & Settings
 ├── packaging/
@@ -215,13 +221,15 @@ tpb-cli/
 │   ├── conftest.py        # Headless QT_QPA_PLATFORM=offscreen setup
 │   ├── test_api.py        # API client and response mocking tests
 │   ├── test_exporter.py   # File writer & dict resilience tests
-│   ├── test_gui_state.py  # GUI settings, history, bookmarks & CLI --gui tests
+│   ├── test_gui_state.py  # GUI settings, URL validation, history, bookmarks & CLI --gui tests
 │   ├── test_gui_views.py  # Offscreen Qt widget/view/action-bar tests
-│   ├── test_gui_workers.py# Async worker fallback & stale-request tests
+│   ├── test_gui_workers.py# Async worker fallback, cancellation & stale-request tests
 │   ├── test_interactive.py# Navigation, series disambiguation & prompt tests
 │   ├── test_models.py     # Dataclass properties & tracker verification
 │   └── test_parser.py     # TV metadata extraction & episode grouping tests
-├── pyproject.toml         # Build configuration & optional [gui]/[dev] extras
+├── AGENTS.md              # Project engineering, security, UI & CI/CD rules
+├── CHANGELOG.md           # Keep-a-Changelog release history (SemVer)
+├── pyproject.toml         # Build configuration, [gui]/[dev] extras & tool settings
 ├── MANIFEST.in            # Distribution manifest rules
 ├── requirements.txt       # Direct core runtime dependencies
 └── README.md              # Project documentation
@@ -229,13 +237,46 @@ tpb-cli/
 
 ---
 
-## 🧪 Running Tests
+## 🧪 Running Tests & Quality Checks
 
 The test suite covers API queries, metadata parsing, interactive TUI navigation, file exports, and offscreen PySide6 GUI workflows:
 
 ```bash
+# Run full test suite
 pytest -v
+
+# Linting, formatting, and type checks
+ruff check tpb tests
+ruff format --check tpb tests
+mypy tpb
+
+# Security & dependency vulnerability scans
+bandit -r tpb -ll
+pip-audit --skip-editable
 ```
+
+---
+
+## 🔄 CI/CD Pipeline & Release Process
+
+This repository includes GitHub Actions workflows in [`.github/workflows/`](.github/workflows):
+
+1. **Continuous Integration ([`ci.yml`](.github/workflows/ci.yml))**:
+   - Triggered automatically on pushes and pull requests to `master`/`main`.
+   - Enforces least-privilege `contents: read` permissions and pip caching.
+   - Fails fast across sequential gates:
+     - **Quality**: `ruff format --check`, `ruff check`, and `mypy`.
+     - **Security**: `bandit -r tpb -ll` static analysis and `pip-audit` dependency scan.
+     - **Test Matrix**: `pytest -v` with `QT_QPA_PLATFORM=offscreen` across Ubuntu & Windows (Python 3.10–3.14).
+     - **Package Build**: `python -m build` and `twine check dist/*`.
+2. **Release Automation ([`release.yml`](.github/workflows/release.yml))**:
+   - Triggered on SemVer tags matching `v*.*.*` (for example `v0.2.0`).
+   - Re-runs full lint, formatting, type, security, and cross-platform test verification before building release binaries (`tpb_cli-*.whl`, `tpb_cli-*.tar.gz`, and Windows standalone `tpb-gui.exe`).
+   - Extracts matching version notes from [`CHANGELOG.md`](CHANGELOG.md) and publishes the GitHub Release under scoped `contents: write` permission.
+   - Local release checklist before tagging:
+     1. Bump `version` in `pyproject.toml` and `__version__` in `tpb/__init__.py` (`MAJOR.MINOR.PATCH`).
+     2. Update `CHANGELOG.md` and commit with a Conventional Commit (e.g., `chore(release): prepare v0.2.0`).
+     3. Wait for all CI checks to pass before creating and pushing a `vX.Y.Z` tag.
 
 ---
 

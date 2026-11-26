@@ -1,6 +1,5 @@
 """Collapsible History and Bookmarks drawer widget."""
 
-from typing import Optional
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
@@ -15,8 +14,8 @@ from PySide6.QtWidgets import (
 
 from tpb.gui.state import AppStateStore
 
-QUERY_DATA_ROLE = Qt.UserRole + 20
-MODE_DATA_ROLE = Qt.UserRole + 21
+QUERY_DATA_ROLE = Qt.ItemDataRole.UserRole + 20
+MODE_DATA_ROLE = Qt.ItemDataRole.UserRole + 21
 
 
 class LibraryDrawer(QFrame):
@@ -26,7 +25,7 @@ class LibraryDrawer(QFrame):
     bookmarks_changed = Signal()
     close_requested = Signal()
 
-    def __init__(self, state_store: AppStateStore, parent: Optional[QWidget] = None):
+    def __init__(self, state_store: AppStateStore, parent: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName("PanelSurface")
         self.state_store = state_store
@@ -40,6 +39,7 @@ class LibraryDrawer(QFrame):
 
         top_bar = QHBoxLayout()
         self.hide_btn = QPushButton("Hide")
+        self.hide_btn.setAccessibleName("Hide library drawer")
         top_bar.addStretch(1)
         top_bar.addWidget(self.hide_btn)
         layout.addLayout(top_bar)
@@ -51,7 +51,9 @@ class LibraryDrawer(QFrame):
         h_layout = QVBoxLayout(history_tab)
         h_layout.setContentsMargins(4, 6, 4, 4)
         self.history_list = QListWidget()
+        self.history_list.setAccessibleName("Search history")
         self.clear_history_btn = QPushButton("Clear History")
+        self.clear_history_btn.setAccessibleName("Clear search history")
         h_layout.addWidget(self.history_list, stretch=1)
         h_layout.addWidget(self.clear_history_btn)
 
@@ -60,7 +62,9 @@ class LibraryDrawer(QFrame):
         b_layout = QVBoxLayout(bookmarks_tab)
         b_layout.setContentsMargins(4, 6, 4, 4)
         self.bookmarks_list = QListWidget()
+        self.bookmarks_list.setAccessibleName("Saved bookmarks")
         self.remove_bookmark_btn = QPushButton("Remove Selected")
+        self.remove_bookmark_btn.setAccessibleName("Remove selected bookmark")
         b_layout.addWidget(self.bookmarks_list, stretch=1)
         b_layout.addWidget(self.remove_bookmark_btn)
 

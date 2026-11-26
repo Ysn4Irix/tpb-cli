@@ -1,12 +1,25 @@
-import pytest
 from pathlib import Path
 from tpb.models import Torrent
 from tpb.exporter import export_magnets_to_file
 
 
 def test_export_magnets_to_file(tmp_path: Path):
-    t1 = Torrent(id="1", name="Movie 1", info_hash="AAA111", leechers=1, seeders=10, size_bytes=1024*1024*500)
-    t2 = Torrent(id="2", name="Movie 2", info_hash="BBB222", leechers=2, seeders=20, size_bytes=1024*1024*700)
+    t1 = Torrent(
+        id="1",
+        name="Movie 1",
+        info_hash="AAA111",
+        leechers=1,
+        seeders=10,
+        size_bytes=1024 * 1024 * 500,
+    )
+    t2 = Torrent(
+        id="2",
+        name="Movie 2",
+        info_hash="BBB222",
+        leechers=2,
+        seeders=20,
+        size_bytes=1024 * 1024 * 700,
+    )
 
     out_file = tmp_path / "test_magnets.txt"
 
@@ -32,7 +45,10 @@ def test_export_magnets_to_file(tmp_path: Path):
 def test_export_magnets_with_dicts(tmp_path: Path):
     """Verify that export_magnets_to_file handles dictionary objects without raising AttributeError."""
     import dataclasses
-    t = Torrent(id="1", name="Show S01E01", info_hash="CCC333", leechers=0, seeders=15, size_bytes=1000)
+
+    t = Torrent(
+        id="1", name="Show S01E01", info_hash="CCC333", leechers=0, seeders=15, size_bytes=1000
+    )
     d = dataclasses.asdict(t)
 
     raw_api_dict = {
@@ -61,10 +77,11 @@ def test_render_with_dicts():
     from tpb.exporter import render_torrents_table, render_magnet_list
     import dataclasses
 
-    t = Torrent(id="1", name="Movie Dict", info_hash="EEE555", leechers=0, seeders=10, size_bytes=50000)
+    t = Torrent(
+        id="1", name="Movie Dict", info_hash="EEE555", leechers=0, seeders=10, size_bytes=50000
+    )
     d = dataclasses.asdict(t)
 
     # These should execute cleanly without raising AttributeError
     render_torrents_table([d])
     render_magnet_list([d])
-

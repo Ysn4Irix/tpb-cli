@@ -1,13 +1,15 @@
 """Background QThreadPool workers and stale-request orchestration for Apibay queries."""
 
-from typing import List, Optional, Set
+import logging
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 
 from tpb.api import ApibayClient, ApibayError, CAT_ALL, CAT_MOVIES_HD, CAT_TV_HD
 from tpb.models import Torrent, TorrentFile
 
+logger = logging.getLogger(__name__)
 
-def execute_search(client: ApibayClient, query: str, mode: str) -> List[Torrent]:
+
+def execute_search(client: ApibayClient, query: str, mode: str) -> list[Torrent]:
     """
     Execute an Apibay search matching CLI category fallback semantics.
     - tv: searches HD TV first, then unscoped query if empty
@@ -33,7 +35,7 @@ def execute_search(client: ApibayClient, query: str, mode: str) -> List[Torrent]
     return client.search(clean_query, category=CAT_ALL)
 
 
-def execute_files_lookup(client: ApibayClient, torrent_id: str) -> List[TorrentFile]:
+def execute_files_lookup(client: ApibayClient, torrent_id: str) -> list[TorrentFile]:
     """Retrieve normalized file-list entries for a torrent ID."""
     return client.get_parsed_files(torrent_id)
 
@@ -62,8 +64,9 @@ class SearchWorker(QRunnable):
             self.signals.finished.emit(self.request_id, results)
         except ApibayError as exc:
             self.signals.error.emit(self.request_id, str(exc))
-        except Exception as exc:  # pragma: no cover - defensive guard
-            self.signals.error.emit(self.request_id, f"Unexpected search error: {exc}")
+        except Exception:  # pragma: no cover - defensive guard
+            logger.exception("Unexpected failure while searching Apibay")
+            self.signals.error.emit(self.request_id, "Unexpected search error. Please try again.")
 
 
 class FilesWorker(QRunnable):
@@ -82,8 +85,11 @@ class FilesWorker(QRunnable):
             self.signals.finished.emit(self.request_id, files)
         except ApibayError as exc:
             self.signals.error.emit(self.request_id, str(exc))
-        except Exception as exc:  # pragma: no cover - defensive guard
-            self.signals.error.emit(self.request_id, f"Unexpected file lookup error: {exc}")
+        except Exception:  # pragma: no cover - defensive guard
+            logger.exception("Unexpected failure while fetching torrent files")
+            self.signals.error.emit(
+                self.request_id, "Unexpected file lookup error. Please try again."
+            )
 
 
 class WorkerManager(QObject):
@@ -98,14 +104,14 @@ class WorkerManager(QObject):
     files_completed = Signal(str, list)
     files_failed = Signal(str, str)
 
-    def __init__(self, client: ApibayClient, thread_pool: Optional[QThreadPool] = None):
+    def __init__(self, client: ApibayClient, thread_pool: QThreadPool | None = None):
         super().__init__()
         self.client = client
         self.thread_pool = thread_pool or QThreadPool.globalInstance()
         self._search_seq = 0
         self._files_seq = 0
         self._search_in_flight = False
-        self._active_runnables: Set[QRunnable] = set()
+        self._active_runnables: set[QRunnable] = set()
 
     @property
     def is_searching(self) -> bool:
@@ -123,9 +129,7 @@ class WorkerManager(QObject):
         worker.signals.finished.connect(
             lambda rid, res, q=query, m=mode, w=worker: self._on_search_finished(rid, res, q, m, w)
         )
-        worker.signals.error.connect(
-            lambda rid, msg, w=worker: self._on_search_error(rid, msg, w)
-        )
+        worker.signals.error.connect(lambda rid, msg, w=worker: self._on_search_error(rid, msg, w))
 
         self.search_started.emit(query, mode)
         self.thread_pool.start(worker)

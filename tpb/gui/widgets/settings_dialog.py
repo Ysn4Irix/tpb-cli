@@ -1,6 +1,6 @@
 """Network, quality, cache, and appearance settings dialog."""
 
-from typing import Callable, Optional
+from collections.abc import Callable
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QComboBox,
@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from tpb.api import DEFAULT_BASE_URL
+from tpb.api import DEFAULT_BASE_URL, validate_http_url, validate_proxy_url
 from tpb.gui.state import AppStateStore
 
 
@@ -27,8 +27,8 @@ class SettingsDialog(QDialog):
     def __init__(
         self,
         state_store: AppStateStore,
-        clear_cache_cb: Optional[Callable[[], None]] = None,
-        parent: Optional[QWidget] = None,
+        clear_cache_cb: Callable[[], None] | None = None,
+        parent: QWidget | None = None,
     ):
         super().__init__(parent)
         self.setWindowTitle("tpb-cli Settings")
@@ -47,21 +47,31 @@ class SettingsDialog(QDialog):
 
         self.api_url_input = QLineEdit()
         self.api_url_input.setPlaceholderText(DEFAULT_BASE_URL)
+        self.api_url_input.setAccessibleName("Apibay Mirror URL")
 
         self.proxy_input = QLineEdit()
         self.proxy_input.setPlaceholderText("e.g. socks5://127.0.0.1:9050 or http://127.0.0.1:8080")
+        self.proxy_input.setAccessibleName("HTTP or SOCKS5 Proxy URL")
 
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(["1080p", "720p", "2160p", "480p", "Any"])
+        self.quality_combo.setAccessibleName("Default TV Quality")
 
         self.theme_combo = QComboBox()
         self.theme_combo.addItems(["Dark", "Light"])
+        self.theme_combo.setAccessibleName("Color Theme")
 
         form.addRow("Apibay Mirror URL:", self.api_url_input)
         form.addRow("HTTP / SOCKS5 Proxy:", self.proxy_input)
         form.addRow("Default TV Quality:", self.quality_combo)
         form.addRow("Theme:", self.theme_combo)
         root.addLayout(form)
+
+        self.validation_label = QLabel("")
+        self.validation_label.setObjectName("ValidationError")
+        self.validation_label.setWordWrap(True)
+        self.validation_label.setVisible(False)
+        root.addWidget(self.validation_label)
 
         cache_row = QHBoxLayout()
         self.clear_cache_btn = QPushButton("Clear Search Cache")
@@ -72,7 +82,9 @@ class SettingsDialog(QDialog):
         cache_row.addStretch(1)
         root.addLayout(cache_row)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
         buttons.accepted.connect(self._on_save)
         buttons.rejected.connect(self.reject)
         root.addWidget(buttons)
@@ -94,9 +106,20 @@ class SettingsDialog(QDialog):
         self.cache_cleared.emit()
 
     def _on_save(self) -> None:
+        raw_url = self.api_url_input.text().strip() or DEFAULT_BASE_URL
+        raw_proxy = self.proxy_input.text().strip()
+        try:
+            validated_url = validate_http_url(raw_url)
+            validated_proxy = validate_proxy_url(raw_proxy) or ""
+        except ValueError as exc:
+            self.validation_label.setText(str(exc))
+            self.validation_label.setVisible(True)
+            return
+
+        self.validation_label.setVisible(False)
         s = self.state_store.settings
-        s.api_url = self.api_url_input.text().strip() or DEFAULT_BASE_URL
-        s.proxy = self.proxy_input.text().strip()
+        s.api_url = validated_url
+        s.proxy = validated_proxy
         s.default_quality = self.quality_combo.currentText()
         s.theme = self.theme_combo.currentText().lower()
         self.state_store.save()

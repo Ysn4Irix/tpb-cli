@@ -1,0 +1,119 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Pre-Release Verification
+    runs-on: ubuntu-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install headless Qt system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon0 libdbus-1-3 libxcb-cursor0
+      - name: Install package and tools
+        run: python -m pip install --upgrade pip && pip install -e ".[gui,dev]" build
+      - name: Run lint, format, typecheck, and security checks
+        run: |
+          ruff format --check tpb tests
+          ruff check tpb tests
+          mypy tpb
+          bandit -r tpb -ll
+      - name: Run test suite
+        run: pytest -v
+      - name: Build & validate Python distributions
+        run: |
+          python -m build
+          twine check dist/*
+      - name: Upload Python package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-distributions
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+
+  build-windows-exe:
+    name: Build Windows Standalone Executable
+    needs: [verify]
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install GUI and PyInstaller dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[gui,dev]"
+      - name: Run Windows tests
+        run: pytest -v
+      - name: Build tpb-gui.exe
+        shell: pwsh
+        run: .\packaging\build_exe.ps1
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-executable
+          path: dist/tpb-gui.exe
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [verify, build-windows-exe]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Python distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: python-distributions
+          path: release-assets
+      - name: Download Windows executable
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-executable
+          path: release-assets
+      - name: Extract changelog notes for tag
+        id: changelog
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          NOTES=$(awk -v ver="$TAG" '
+            $0 ~ "^## \\[" ver "\\]" { found=1; next }
+            found && $0 ~ "^## \\[" { exit }
+            found { print }
+          ' CHANGELOG.md)
+          if [ -z "$NOTES" ]; then
+            NOTES="Release $GITHUB_REF_NAME"
+          fi
+          {
+            echo "notes<<EOF"
+            echo "$NOTES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ steps.changelog.outputs.notes }}
+          files: |
+            release-assets/*.whl
+            release-assets/*.tar.gz
+            release-assets/tpb-gui.exe

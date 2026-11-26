@@ -1,7 +1,7 @@
 """Application launcher and QApplication lifecycle entrypoint for tpb-gui."""
 
 import sys
-from typing import Optional, Sequence
+from collections.abc import Sequence
 from PySide6.QtWidgets import QApplication
 
 from tpb.gui.main_window import MainWindow
@@ -9,7 +9,7 @@ from tpb.gui.state import AppStateStore
 from tpb.gui.theme import build_stylesheet
 
 
-def create_application(argv: Optional[Sequence[str]] = None) -> QApplication:
+def create_application(argv: Sequence[str] | None = None) -> QApplication:
     """Create or reuse the singleton QApplication configured for desktop styling."""
     existing = QApplication.instance()
     if isinstance(existing, QApplication):
@@ -21,9 +21,9 @@ def create_application(argv: Optional[Sequence[str]] = None) -> QApplication:
 
 
 def main(
-    argv: Optional[Sequence[str]] = None,
-    api_url: Optional[str] = None,
-    proxy: Optional[str] = None,
+    argv: Sequence[str] | None = None,
+    api_url: str | None = None,
+    proxy: str | None = None,
 ) -> int:
     """Launch the PySide6 desktop interface."""
     app = create_application(argv)

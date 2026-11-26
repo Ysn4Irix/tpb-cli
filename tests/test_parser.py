@@ -1,4 +1,3 @@
-import pytest
 from tpb.models import Torrent
 from tpb.parser import (
     detect_quality,
@@ -87,8 +86,17 @@ def test_filter_and_group_episodes():
 
 
 def test_get_season_packs():
-    pack = Torrent(id="1", name="Show Season 1 Complete 1080p", info_hash="AAA", leechers=5, seeders=200, size_bytes=10000)
-    single = Torrent(id="2", name="Show S01E01 1080p", info_hash="BBB", leechers=5, seeders=50, size_bytes=1000)
+    pack = Torrent(
+        id="1",
+        name="Show Season 1 Complete 1080p",
+        info_hash="AAA",
+        leechers=5,
+        seeders=200,
+        size_bytes=10000,
+    )
+    single = Torrent(
+        id="2", name="Show S01E01 1080p", info_hash="BBB", leechers=5, seeders=50, size_bytes=1000
+    )
 
     enriched = [enrich_torrent_metadata(t) for t in [pack, single]]
     packs = get_season_packs(enriched, target_season=1)
@@ -100,13 +108,30 @@ def test_get_season_packs():
 def test_get_episode_quality_variants():
     from tpb.parser import get_episode_quality_variants
 
-    t_1080p_1 = Torrent(id="1", name="Ep1 1080p x264", info_hash="11", leechers=1, seeders=100, size_bytes=1000)
-    t_1080p_2 = Torrent(id="2", name="Ep1 1080p x264 duplicate", info_hash="22", leechers=1, seeders=50, size_bytes=1000)
-    t_1080p_x265 = Torrent(id="3", name="Ep1 1080p x265", info_hash="33", leechers=1, seeders=80, size_bytes=500)
-    t_720p = Torrent(id="4", name="Ep1 720p x264", info_hash="44", leechers=1, seeders=90, size_bytes=400)
-    t_2160p = Torrent(id="5", name="Ep1 2160p 4k", info_hash="55", leechers=1, seeders=30, size_bytes=4000)
+    t_1080p_1 = Torrent(
+        id="1", name="Ep1 1080p x264", info_hash="11", leechers=1, seeders=100, size_bytes=1000
+    )
+    t_1080p_2 = Torrent(
+        id="2",
+        name="Ep1 1080p x264 duplicate",
+        info_hash="22",
+        leechers=1,
+        seeders=50,
+        size_bytes=1000,
+    )
+    t_1080p_x265 = Torrent(
+        id="3", name="Ep1 1080p x265", info_hash="33", leechers=1, seeders=80, size_bytes=500
+    )
+    t_720p = Torrent(
+        id="4", name="Ep1 720p x264", info_hash="44", leechers=1, seeders=90, size_bytes=400
+    )
+    t_2160p = Torrent(
+        id="5", name="Ep1 2160p 4k", info_hash="55", leechers=1, seeders=30, size_bytes=4000
+    )
 
-    all_torrents = [enrich_torrent_metadata(t) for t in [t_1080p_1, t_1080p_2, t_1080p_x265, t_720p, t_2160p]]
+    all_torrents = [
+        enrich_torrent_metadata(t) for t in [t_1080p_1, t_1080p_2, t_1080p_x265, t_720p, t_2160p]
+    ]
 
     variants = get_episode_quality_variants(all_torrents)
 
@@ -123,17 +148,30 @@ def test_get_episode_quality_variants():
 def test_get_detected_seasons_summary():
     from tpb.parser import get_detected_seasons_summary
 
-    t1 = Torrent(id="1", name="Show.S01E01.1080p", info_hash="11", leechers=1, seeders=100, size_bytes=1000)
-    t2 = Torrent(id="2", name="Show.S01E02.1080p", info_hash="22", leechers=1, seeders=80, size_bytes=1000)
-    t3 = Torrent(id="3", name="Show.Season.1.Complete.720p", info_hash="33", leechers=1, seeders=200, size_bytes=5000)
-    t4 = Torrent(id="4", name="Show.S02E01.720p", info_hash="44", leechers=1, seeders=50, size_bytes=1000)
+    t1 = Torrent(
+        id="1", name="Show.S01E01.1080p", info_hash="11", leechers=1, seeders=100, size_bytes=1000
+    )
+    t2 = Torrent(
+        id="2", name="Show.S01E02.1080p", info_hash="22", leechers=1, seeders=80, size_bytes=1000
+    )
+    t3 = Torrent(
+        id="3",
+        name="Show.Season.1.Complete.720p",
+        info_hash="33",
+        leechers=1,
+        seeders=200,
+        size_bytes=5000,
+    )
+    t4 = Torrent(
+        id="4", name="Show.S02E01.720p", info_hash="44", leechers=1, seeders=50, size_bytes=1000
+    )
 
     summary = get_detected_seasons_summary([t1, t2, t3, t4])
 
     assert 1 in summary
     assert 2 in summary
     assert len(summary[1]["episodes"]) == 2  # ep 1 and 2
-    assert len(summary[1]["packs"]) == 1      # 1 complete pack
+    assert len(summary[1]["packs"]) == 1  # 1 complete pack
     assert summary[1]["total_torrents"] == 3
     assert len(summary[2]["episodes"]) == 1  # ep 1
     assert len(summary[2]["packs"]) == 0
@@ -142,10 +180,38 @@ def test_get_detected_seasons_summary():
 def test_detect_series_variants():
     from tpb.parser import detect_series_variants
 
-    us_1 = Torrent(id="1", name="The.Office.US.S01E01.1080p", info_hash="1", leechers=1, seeders=10, size_bytes=100)
-    us_2 = Torrent(id="2", name="The.Office.US.S02E01.1080p", info_hash="2", leechers=1, seeders=10, size_bytes=100)
-    uk_1 = Torrent(id="3", name="The.Office.UK.S01E01.720p", info_hash="3", leechers=1, seeders=10, size_bytes=100)
-    uk_2 = Torrent(id="4", name="The.Office.UK.S02E01.720p", info_hash="4", leechers=1, seeders=10, size_bytes=100)
+    us_1 = Torrent(
+        id="1",
+        name="The.Office.US.S01E01.1080p",
+        info_hash="1",
+        leechers=1,
+        seeders=10,
+        size_bytes=100,
+    )
+    us_2 = Torrent(
+        id="2",
+        name="The.Office.US.S02E01.1080p",
+        info_hash="2",
+        leechers=1,
+        seeders=10,
+        size_bytes=100,
+    )
+    uk_1 = Torrent(
+        id="3",
+        name="The.Office.UK.S01E01.720p",
+        info_hash="3",
+        leechers=1,
+        seeders=10,
+        size_bytes=100,
+    )
+    uk_2 = Torrent(
+        id="4",
+        name="The.Office.UK.S02E01.720p",
+        info_hash="4",
+        leechers=1,
+        seeders=10,
+        size_bytes=100,
+    )
 
     variants = detect_series_variants([us_1, us_2, uk_1, uk_2])
     assert "US" in variants
@@ -155,5 +221,3 @@ def test_detect_series_variants():
 
     # Single variant should return empty
     assert detect_series_variants([us_1, us_2]) == {}
-
-

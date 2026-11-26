@@ -3,7 +3,8 @@
 import re
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
-from typing import Optional, List, Sequence, Any
+from typing import Any
+from collections.abc import Sequence
 import urllib.parse
 
 
@@ -22,6 +23,7 @@ def sanitize_filename(name: str) -> str:
     clean = re.sub(r"[^\w\s-]", "", name.lower())
     clean = re.sub(r"[\s_]+", "_", clean).strip("_")
     return clean or "torrents"
+
 
 # List of high-uptime public trackers
 DEFAULT_TRACKERS = [
@@ -49,9 +51,9 @@ class Torrent:
     status: str = "member"
     category: str = "0"
     imdb: str = ""
-    season: Optional[int] = None
-    episode: Optional[int] = None
-    episodes: List[int] = field(default_factory=list)
+    season: int | None = None
+    episode: int | None = None
+    episodes: list[int] = field(default_factory=list)
     is_season_pack: bool = False
     quality: str = "Unknown"
     codec: str = "Unknown"
@@ -79,7 +81,7 @@ class Torrent:
             return "N/A"
         try:
             return datetime.fromtimestamp(self.added, tz=timezone.utc).strftime("%Y-%m-%d")
-        except Exception:
+        except (OverflowError, OSError, ValueError, TypeError):
             return "N/A"
 
     @property
@@ -123,7 +125,7 @@ def ensure_torrent(item: Any) -> Torrent:
     raise TypeError(f"Expected Torrent or dict, got {type(item)}")
 
 
-def ensure_torrents(items: Sequence[Any]) -> List[Torrent]:
+def ensure_torrents(items: Sequence[Any]) -> list[Torrent]:
     """Ensure all items in sequence are Torrent instances."""
     if not items:
         return []
@@ -143,12 +145,12 @@ class TorrentFile:
         return format_bytes(self.size_bytes)
 
 
-def normalize_torrent_files(raw_files: Any) -> List[TorrentFile]:
+def normalize_torrent_files(raw_files: Any) -> list[TorrentFile]:
     """Normalize raw Apibay /f.php file-list payloads into TorrentFile records."""
     if not isinstance(raw_files, list):
         return []
 
-    normalized: List[TorrentFile] = []
+    normalized: list[TorrentFile] = []
     for item in raw_files:
         if isinstance(item, TorrentFile):
             normalized.append(item)
@@ -168,10 +170,12 @@ def normalize_torrent_files(raw_files: Any) -> List[TorrentFile]:
         raw_size = item.get("size", item.get("size_bytes", 0))
         if isinstance(raw_size, list):
             raw_size = raw_size[0] if raw_size else 0
-        try:
-            size_bytes = max(0, int(raw_size))
-        except (ValueError, TypeError):
-            size_bytes = 0
+        size_bytes = 0
+        if isinstance(raw_size, (int, float, str)):
+            try:
+                size_bytes = max(0, int(raw_size))
+            except ValueError:
+                size_bytes = 0
 
         if len(raw_files) == 1 and size_bytes == 0 and "not found" in name.lower():
             return []

@@ -1,4 +1,3 @@
-import pytest
 from tpb.interactive import is_back, sanitize_filename
 
 
@@ -53,10 +52,11 @@ def test_tv_flow_instant_back_navigation():
 
     sess = InteractiveSession(client=mock_client)
 
-    with patch("InquirerPy.inquirer.text") as mock_text, \
-         patch("InquirerPy.inquirer.select") as mock_select, \
-         patch("InquirerPy.inquirer.checkbox") as mock_checkbox:
-
+    with (
+        patch("InquirerPy.inquirer.text") as mock_text,
+        patch("InquirerPy.inquirer.select") as mock_select,
+        patch("InquirerPy.inquirer.checkbox") as mock_checkbox,
+    ):
         # Step 1: title 'Severance', then after backing out from Step 3 -> Step 1: 'b'
         t_mock = MagicMock()
         t_mock.execute.side_effect = ["Severance", "b"]
@@ -89,17 +89,54 @@ def test_tv_flow_series_disambiguation():
 
     mock_client = MagicMock()
     mock_client._cache = {}
-    t_us1 = enrich_torrent_metadata(Torrent(id="1", name="The.Office.US.S01E01.1080p", info_hash="1", leechers=1, seeders=10, size_bytes=100))
-    t_us2 = enrich_torrent_metadata(Torrent(id="2", name="The.Office.US.S01E02.1080p", info_hash="2", leechers=1, seeders=10, size_bytes=100))
-    t_uk1 = enrich_torrent_metadata(Torrent(id="3", name="The.Office.UK.S01E01.720p", info_hash="3", leechers=1, seeders=10, size_bytes=100))
-    t_uk2 = enrich_torrent_metadata(Torrent(id="4", name="The.Office.UK.S01E02.720p", info_hash="4", leechers=1, seeders=10, size_bytes=100))
+    t_us1 = enrich_torrent_metadata(
+        Torrent(
+            id="1",
+            name="The.Office.US.S01E01.1080p",
+            info_hash="1",
+            leechers=1,
+            seeders=10,
+            size_bytes=100,
+        )
+    )
+    t_us2 = enrich_torrent_metadata(
+        Torrent(
+            id="2",
+            name="The.Office.US.S01E02.1080p",
+            info_hash="2",
+            leechers=1,
+            seeders=10,
+            size_bytes=100,
+        )
+    )
+    t_uk1 = enrich_torrent_metadata(
+        Torrent(
+            id="3",
+            name="The.Office.UK.S01E01.720p",
+            info_hash="3",
+            leechers=1,
+            seeders=10,
+            size_bytes=100,
+        )
+    )
+    t_uk2 = enrich_torrent_metadata(
+        Torrent(
+            id="4",
+            name="The.Office.UK.S01E02.720p",
+            info_hash="4",
+            leechers=1,
+            seeders=10,
+            size_bytes=100,
+        )
+    )
     mock_client.search.return_value = [t_us1, t_us2, t_uk1, t_uk2]
 
     sess = InteractiveSession(client=mock_client)
 
-    with patch("InquirerPy.inquirer.text") as mock_text, \
-         patch("InquirerPy.inquirer.select") as mock_select:
-
+    with (
+        patch("InquirerPy.inquirer.text") as mock_text,
+        patch("InquirerPy.inquirer.select") as mock_select,
+    ):
         # Step 1: 'The Office', then on back returns 'b'
         t_mock = MagicMock()
         t_mock.execute.side_effect = ["The Office", "b"]
@@ -111,7 +148,6 @@ def test_tv_flow_series_disambiguation():
         mock_select.return_value = s_mock
 
         sess.handle_tv_flow()
-
 
 
 def test_movie_flow_instant_back_navigation():
@@ -138,10 +174,11 @@ def test_movie_flow_instant_back_navigation():
 
     sess = InteractiveSession(client=mock_client)
 
-    with patch("InquirerPy.inquirer.text") as mock_text, \
-         patch("InquirerPy.inquirer.select") as mock_select, \
-         patch("InquirerPy.inquirer.checkbox") as mock_checkbox:
-
+    with (
+        patch("InquirerPy.inquirer.text") as mock_text,
+        patch("InquirerPy.inquirer.select") as mock_select,
+        patch("InquirerPy.inquirer.checkbox") as mock_checkbox,
+    ):
         t_mock = MagicMock()
         t_mock.execute.side_effect = ["Inception", "b"]
         mock_text.return_value = t_mock
@@ -164,7 +201,11 @@ def test_inquirerpy_choice_preserves_torrent_dataclass():
     from InquirerPy.prompts.checkbox import InquirerPyCheckboxControl
     from tpb.models import Torrent
 
-    t = Torrent(id="1", name="Test.S01E01", info_hash="abc", leechers=0, seeders=10, size_bytes=1000)
+    assert hasattr(tpb.interactive, "_safe_get_choices")
+
+    t = Torrent(
+        id="1", name="Test.S01E01", info_hash="abc", leechers=0, seeders=10, size_bytes=1000
+    )
     choice = Choice(t, name="Test S01E01", enabled=True)
 
     ctrl = InquirerPyCheckboxControl(
@@ -187,15 +228,23 @@ def test_export_workflow_with_dict_torrents(tmp_path):
     from tpb.interactive import InteractiveSession
     from tpb.models import Torrent
 
-    t = Torrent(id="1", name="Test.Show.S01E01", info_hash="111222333444", leechers=0, seeders=5, size_bytes=1000)
+    t = Torrent(
+        id="1",
+        name="Test.Show.S01E01",
+        info_hash="111222333444",
+        leechers=0,
+        seeders=5,
+        size_bytes=1000,
+    )
     d = dataclasses.asdict(t)
 
     sess = InteractiveSession(client=MagicMock())
     out_file = str(tmp_path / "out_magnets.txt")
 
-    with patch("InquirerPy.inquirer.select") as mock_select, \
-         patch("InquirerPy.inquirer.text") as mock_text:
-
+    with (
+        patch("InquirerPy.inquirer.select") as mock_select,
+        patch("InquirerPy.inquirer.text") as mock_text,
+    ):
         s_mock = MagicMock()
         s_mock.execute.return_value = "file"
         mock_select.return_value = s_mock
@@ -209,4 +258,3 @@ def test_export_workflow_with_dict_torrents(tmp_path):
         assert (tmp_path / "out_magnets.txt").exists()
         content = (tmp_path / "out_magnets.txt").read_text(encoding="utf-8")
         assert "Test.Show.S01E01" in content
-

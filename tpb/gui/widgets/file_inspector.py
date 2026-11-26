@@ -1,6 +1,5 @@
 """Side/bottom drawer displaying internal files for a focused torrent."""
 
-from typing import List, Optional
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
@@ -24,10 +23,10 @@ class FileInspectorDrawer(QFrame):
     retry_requested = Signal(str)
     close_requested = Signal()
 
-    def __init__(self, parent: Optional[QWidget] = None):
+    def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName("PanelSurface")
-        self._current_torrent: Optional[Torrent] = None
+        self._current_torrent: Torrent | None = None
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -43,8 +42,10 @@ class FileInspectorDrawer(QFrame):
         title_label.setFont(bold)
 
         self.retry_btn = QPushButton("Retry")
+        self.retry_btn.setAccessibleName("Retry file lookup")
         self.retry_btn.setVisible(False)
         self.close_btn = QPushButton("Hide")
+        self.close_btn.setAccessibleName("Hide file inspector")
 
         header.addWidget(title_label)
         header.addStretch(1)
@@ -67,13 +68,14 @@ class FileInspectorDrawer(QFrame):
         layout.addWidget(self.status_label)
 
         self.files_tree = QTreeWidget()
+        self.files_tree.setAccessibleName("Torrent files list")
         self.files_tree.setColumnCount(2)
         self.files_tree.setHeaderLabels(["File Path", "Size"])
         self.files_tree.setRootIsDecorated(False)
         self.files_tree.setAlternatingRowColors(True)
         tree_header = self.files_tree.header()
-        tree_header.setSectionResizeMode(0, QHeaderView.Stretch)
-        tree_header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        tree_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        tree_header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         layout.addWidget(self.files_tree, stretch=1)
 
         self.retry_btn.clicked.connect(self._on_retry_clicked)
@@ -102,7 +104,7 @@ class FileInspectorDrawer(QFrame):
         self.retry_btn.setVisible(False)
         self.files_tree.clear()
 
-    def show_files(self, torrent_id: str, files: List[TorrentFile]) -> None:
+    def show_files(self, torrent_id: str, files: list[TorrentFile]) -> None:
         """Render normalized TorrentFile rows if they correspond to the focused torrent."""
         if self._current_torrent is None or str(self._current_torrent.id) != str(torrent_id):
             return
@@ -120,7 +122,7 @@ class FileInspectorDrawer(QFrame):
 
         for entry in files:
             item = QTreeWidgetItem([entry.name, entry.human_size])
-            item.setTextAlignment(1, Qt.AlignRight | Qt.AlignVCenter)
+            item.setTextAlignment(1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             item.setToolTip(0, entry.name)
             self.files_tree.addTopLevelItem(item)
 
@@ -134,7 +136,7 @@ class FileInspectorDrawer(QFrame):
         self.retry_btn.setVisible(True)
 
     @property
-    def current_torrent_id(self) -> Optional[str]:
+    def current_torrent_id(self) -> str | None:
         """Return currently inspected torrent ID if any."""
         return str(self._current_torrent.id) if self._current_torrent is not None else None
 

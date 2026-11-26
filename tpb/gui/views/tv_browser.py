@@ -1,6 +1,5 @@
 """TV Series browser view with regional disambiguation, auto-detected seasons, and episode matrix."""
 
-from typing import Dict, List, Optional
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
@@ -32,8 +31,8 @@ from tpb.parser import (
     get_season_packs,
 )
 
-TORRENT_ROLE = Qt.UserRole + 10
-EPISODE_NUM_ROLE = Qt.UserRole + 11
+TORRENT_ROLE = Qt.ItemDataRole.UserRole + 10
+EPISODE_NUM_ROLE = Qt.ItemDataRole.UserRole + 11
 
 
 class TvBrowserView(QWidget):
@@ -43,16 +42,16 @@ class TvBrowserView(QWidget):
     torrent_focused = Signal(object)
     export_hint_changed = Signal(str)
 
-    def __init__(self, theme_name: str = "dark", parent: Optional[QWidget] = None):
+    def __init__(self, theme_name: str = "dark", parent: QWidget | None = None):
         super().__init__(parent)
         self._theme_name = theme_name
         self._palette: ThemePalette = get_palette(theme_name)
         self._show_name = ""
-        self._all_torrents: List[Torrent] = []
-        self._filtered_torrents: List[Torrent] = []
-        self._series_variants: Dict[str, List[Torrent]] = {}
-        self._seasons_summary: Dict[int, dict] = {}
-        self._current_season: Optional[int] = None
+        self._all_torrents: list[Torrent] = []
+        self._filtered_torrents: list[Torrent] = []
+        self._series_variants: dict[str, list[Torrent]] = {}
+        self._seasons_summary: dict[int, dict] = {}
+        self._current_season: int | None = None
         self._current_submode: str = "episodes"  # "episodes" | "packs" | "all"
         self._updating_tree = False
 
@@ -72,7 +71,9 @@ class TvBrowserView(QWidget):
         disambig_layout.setSpacing(8)
 
         self.disambig_label = QLabel("Multiple series versions detected:")
-        self.disambig_label.setObjectName("BannerInfo")
+        disambig_font = QFont()
+        disambig_font.setBold(True)
+        self.disambig_label.setFont(disambig_font)
         disambig_layout.addWidget(self.disambig_label)
 
         self.variant_chips_layout = QHBoxLayout()
@@ -86,7 +87,7 @@ class TvBrowserView(QWidget):
         root.addWidget(self.disambig_frame)
 
         # Main TV Splitter: Seasons list (left) | Content tabs (right)
-        splitter = QSplitter(Qt.Horizontal)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
 
         # Left Season Navigator
         left_panel = QFrame()
@@ -102,6 +103,7 @@ class TvBrowserView(QWidget):
         left_layout.addWidget(self.season_header)
 
         self.season_list = QListWidget()
+        self.season_list.setAccessibleName("Detected seasons")
         self.season_list.setMinimumWidth(190)
         left_layout.addWidget(self.season_list, stretch=1)
         splitter.addWidget(left_panel)
@@ -118,10 +120,13 @@ class TvBrowserView(QWidget):
 
         self.episodes_mode_btn = QPushButton("Episodes")
         self.episodes_mode_btn.setCheckable(True)
+        self.episodes_mode_btn.setAccessibleName("Show individual episodes")
         self.packs_mode_btn = QPushButton("Season Packs")
         self.packs_mode_btn.setCheckable(True)
+        self.packs_mode_btn.setAccessibleName("Show complete season packs")
         self.all_mode_btn = QPushButton("All Releases")
         self.all_mode_btn.setCheckable(True)
+        self.all_mode_btn.setAccessibleName("Show all matching releases")
 
         self.submode_group = QButtonGroup(self)
         self.submode_group.setExclusive(True)
@@ -131,9 +136,12 @@ class TvBrowserView(QWidget):
 
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(["1080p", "720p", "2160p", "480p", "Any"])
+        self.quality_combo.setAccessibleName("Preferred TV resolution")
 
         self.select_recommended_btn = QPushButton("Select Recommended")
+        self.select_recommended_btn.setAccessibleName("Select top release for every episode")
         self.clear_btn = QPushButton("Clear")
+        self.clear_btn.setAccessibleName("Clear selected TV releases")
 
         toolbar.addWidget(self.episodes_mode_btn)
         toolbar.addWidget(self.packs_mode_btn)
@@ -149,19 +157,22 @@ class TvBrowserView(QWidget):
         self.content_stack = QStackedWidget()
 
         self.episode_tree = QTreeWidget()
+        self.episode_tree.setAccessibleName("TV episodes and quality variants")
         self.episode_tree.setColumnCount(5)
-        self.episode_tree.setHeaderLabels(["Episode / Quality Variant", "Badge", "Size", "Seeds", "Uploader"])
+        self.episode_tree.setHeaderLabels(
+            ["Episode / Quality Variant", "Badge", "Size", "Seeds", "Uploader"]
+        )
         self.episode_tree.setAlternatingRowColors(True)
         tree_header = self.episode_tree.header()
-        tree_header.setSectionResizeMode(0, QHeaderView.Stretch)
+        tree_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         for col in (1, 2, 3):
-            tree_header.setSectionResizeMode(col, QHeaderView.ResizeToContents)
-        tree_header.setSectionResizeMode(4, QHeaderView.Interactive)
+            tree_header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
+        tree_header.setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
         self.episode_tree.setColumnWidth(4, 120)
 
         self.fallback_table = TorrentResultsView(theme_name=self._theme_name, parent=self)
 
-        self.content_stack.addWidget(self.episode_tree)   # index 0
+        self.content_stack.addWidget(self.episode_tree)  # index 0
         self.content_stack.addWidget(self.fallback_table)  # index 1
         right_layout.addWidget(self.content_stack, stretch=1)
 
@@ -182,7 +193,9 @@ class TvBrowserView(QWidget):
         self.clear_btn.clicked.connect(self.clear_selection)
         self.episode_tree.itemChanged.connect(self._on_episode_item_changed)
         self.episode_tree.itemClicked.connect(self._on_episode_item_focused)
-        self.episode_tree.currentItemChanged.connect(lambda cur, _prev: self._on_episode_item_focused(cur, 0))
+        self.episode_tree.currentItemChanged.connect(
+            lambda cur, _prev: self._on_episode_item_focused(cur, 0)
+        )
         self.fallback_table.selection_changed.connect(self._on_table_selection_changed)
         self.fallback_table.torrent_focused.connect(self.torrent_focused.emit)
 
@@ -195,7 +208,7 @@ class TvBrowserView(QWidget):
             self._populate_season_content()
 
     def set_search_results(
-        self, show_name: str, torrents: List[Torrent], default_quality: str = "1080p"
+        self, show_name: str, torrents: list[Torrent], default_quality: str = "1080p"
     ) -> None:
         """Load fresh search results, detect regional variants and seasons, and render UI."""
         self._show_name = show_name.strip()
@@ -270,13 +283,13 @@ class TvBrowserView(QWidget):
                     tot = info["total_torrents"]
                     parts.append(f"{tot} release{'s' if tot != 1 else ''}")
                 item = QListWidgetItem(f"Season {s_num}  ({', '.join(parts)})")
-                item.setData(Qt.UserRole, s_num)
+                item.setData(Qt.ItemDataRole.UserRole, s_num)
                 self.season_list.addItem(item)
         else:
             self.season_header.setText("Detected Seasons (None)")
 
         all_item = QListWidgetItem(f"All Releases ({len(self._filtered_torrents)})")
-        all_item.setData(Qt.UserRole, None)
+        all_item.setData(Qt.ItemDataRole.UserRole, None)
         self.season_list.addItem(all_item)
         self.season_list.blockSignals(False)
 
@@ -287,7 +300,7 @@ class TvBrowserView(QWidget):
         if row < 0:
             return
         item = self.season_list.item(row)
-        self._current_season = item.data(Qt.UserRole) if item is not None else None
+        self._current_season = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
         self._update_export_hint()
         self._populate_season_content()
 
@@ -314,7 +327,9 @@ class TvBrowserView(QWidget):
             self.content_stack.setCurrentIndex(1)
             self.select_recommended_btn.setEnabled(False)
             self.clear_btn.setEnabled(False)
-            self.fallback_table.set_torrents(packs, preferred_quality=self.quality_combo.currentText(), precheck_first=bool(packs))
+            self.fallback_table.set_torrents(
+                packs, preferred_quality=self.quality_combo.currentText(), precheck_first=False
+            )
         else:
             pool = (
                 self._seasons_summary[self._current_season]["torrents"]
@@ -324,7 +339,9 @@ class TvBrowserView(QWidget):
             self.content_stack.setCurrentIndex(1)
             self.select_recommended_btn.setEnabled(False)
             self.clear_btn.setEnabled(False)
-            self.fallback_table.set_torrents(pool, preferred_quality=self.quality_combo.currentText())
+            self.fallback_table.set_torrents(
+                pool, preferred_quality=self.quality_combo.currentText()
+            )
 
     def _populate_season_content(self) -> None:
         season = self._current_season
@@ -362,7 +379,7 @@ class TvBrowserView(QWidget):
             self.all_mode_btn.setChecked(True)
             self._switch_submode("all")
 
-    def _build_episode_tree(self, episodes_map: Dict[int, List[Torrent]]) -> None:
+    def _build_episode_tree(self, episodes_map: dict[int, list[Torrent]]) -> None:
         self._updating_tree = True
         try:
             self.episode_tree.clear()
@@ -374,7 +391,7 @@ class TvBrowserView(QWidget):
                 opt_label = f"{len(variants)} option{'s' if len(variants) != 1 else ''}"
                 parent = QTreeWidgetItem([f"Episode {ep_num:02d} ({opt_label})", "", "", "", ""])
                 parent.setFont(0, bold_font)
-                parent.setFlags(Qt.ItemIsEnabled)
+                parent.setFlags(Qt.ItemFlag.ItemIsEnabled)
                 parent.setData(0, EPISODE_NUM_ROLE, ep_num)
                 self.episode_tree.addTopLevelItem(parent)
 
@@ -389,26 +406,39 @@ class TvBrowserView(QWidget):
                     elif variant.is_trusted:
                         uploader = f"[TRUST] {uploader}"
 
-                    child = QTreeWidgetItem([
-                        title_text,
-                        badge,
-                        variant.human_size,
-                        str(variant.seeders),
-                        uploader,
-                    ])
-                    child.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable)
-                    child.setCheckState(0, Qt.Checked if is_default else Qt.Unchecked)
+                    child = QTreeWidgetItem(
+                        [
+                            title_text,
+                            badge,
+                            variant.human_size,
+                            str(variant.seeders),
+                            uploader,
+                        ]
+                    )
+                    child.setFlags(
+                        Qt.ItemFlag.ItemIsEnabled
+                        | Qt.ItemFlag.ItemIsSelectable
+                        | Qt.ItemFlag.ItemIsUserCheckable
+                    )
+                    child.setCheckState(0, Qt.CheckState.Unchecked)
                     child.setData(0, TORRENT_ROLE, variant)
                     child.setData(0, EPISODE_NUM_ROLE, ep_num)
-                    child.setTextAlignment(2, Qt.AlignRight | Qt.AlignVCenter)
-                    child.setTextAlignment(3, Qt.AlignRight | Qt.AlignVCenter)
+                    child.setTextAlignment(
+                        2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                    )
+                    child.setTextAlignment(
+                        3, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                    )
 
                     if variant.seeders > 50:
                         child.setForeground(3, QColor(self._palette.seed_high))
+                        child.setToolTip(3, "Healthy (>50 seeders)")
                     elif variant.seeders > 5:
                         child.setForeground(3, QColor(self._palette.seed_mid))
+                        child.setToolTip(3, "Moderate (6-50 seeders)")
                     else:
                         child.setForeground(3, QColor(self._palette.seed_low))
+                        child.setToolTip(3, "Low (<=5 seeders)")
 
                     if is_default:
                         child.setForeground(1, QColor(self._palette.accent))
@@ -426,19 +456,23 @@ class TvBrowserView(QWidget):
         if parent is None:
             return
 
-        if item.checkState(0) == Qt.Checked:
+        if item.checkState(0) == Qt.CheckState.Checked:
             self._updating_tree = True
             try:
                 for i in range(parent.childCount()):
                     sibling = parent.child(i)
-                    if sibling is not item and sibling.checkState(0) == Qt.Checked:
-                        sibling.setCheckState(0, Qt.Unchecked)
+                    if (
+                        sibling is not None
+                        and sibling is not item
+                        and sibling.checkState(0) == Qt.CheckState.Checked
+                    ):
+                        sibling.setCheckState(0, Qt.CheckState.Unchecked)
             finally:
                 self._updating_tree = False
 
         self._emit_tree_selection()
 
-    def _on_episode_item_focused(self, item: Optional[QTreeWidgetItem], _col: int) -> None:
+    def _on_episode_item_focused(self, item: QTreeWidgetItem | None, _col: int) -> None:
         if item is None:
             return
         torrent = item.data(0, TORRENT_ROLE)
@@ -455,8 +489,14 @@ class TvBrowserView(QWidget):
         try:
             for i in range(self.episode_tree.topLevelItemCount()):
                 parent = self.episode_tree.topLevelItem(i)
+                if parent is None:
+                    continue
                 for j in range(parent.childCount()):
-                    parent.child(j).setCheckState(0, Qt.Checked if j == 0 else Qt.Unchecked)
+                    child = parent.child(j)
+                    if child is not None:
+                        child.setCheckState(
+                            0, Qt.CheckState.Checked if j == 0 else Qt.CheckState.Unchecked
+                        )
         finally:
             self._updating_tree = False
         self._emit_tree_selection()
@@ -467,23 +507,29 @@ class TvBrowserView(QWidget):
         try:
             for i in range(self.episode_tree.topLevelItemCount()):
                 parent = self.episode_tree.topLevelItem(i)
+                if parent is None:
+                    continue
                 for j in range(parent.childCount()):
-                    parent.child(j).setCheckState(0, Qt.Unchecked)
+                    child = parent.child(j)
+                    if child is not None:
+                        child.setCheckState(0, Qt.CheckState.Unchecked)
         finally:
             self._updating_tree = False
         self._emit_tree_selection()
 
-    def checked_torrents(self) -> List[Torrent]:
+    def checked_torrents(self) -> list[Torrent]:
         """Return currently selected torrents from the active TV sub-view."""
         if self._current_submode != "episodes":
             return self.fallback_table.checked_torrents()
 
-        selected: List[Torrent] = []
+        selected: list[Torrent] = []
         for i in range(self.episode_tree.topLevelItemCount()):
             parent = self.episode_tree.topLevelItem(i)
+            if parent is None:
+                continue
             for j in range(parent.childCount()):
                 child = parent.child(j)
-                if child.checkState(0) == Qt.Checked:
+                if child is not None and child.checkState(0) == Qt.CheckState.Checked:
                     t = child.data(0, TORRENT_ROLE)
                     if isinstance(t, Torrent):
                         selected.append(t)

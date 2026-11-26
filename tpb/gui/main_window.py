@@ -1,6 +1,5 @@
 """Main application window coordinating search modes, results views, drawers, and actions."""
 
-from typing import Optional
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
@@ -39,9 +38,9 @@ class MainWindow(QMainWindow):
 
     def __init__(
         self,
-        client: Optional[ApibayClient] = None,
-        state_store: Optional[AppStateStore] = None,
-        parent: Optional[QWidget] = None,
+        client: ApibayClient | None = None,
+        state_store: AppStateStore | None = None,
+        parent: QWidget | None = None,
     ):
         super().__init__(parent)
         self.state_store = state_store or AppStateStore()
@@ -100,20 +99,27 @@ class MainWindow(QMainWindow):
 
         self.search_input = QLineEdit()
         self.search_input.setClearButtonEnabled(True)
+        self.search_input.setAccessibleName("Search query")
 
         self.bookmark_btn = QPushButton("☆ Bookmark")
         self.bookmark_btn.setToolTip("Bookmark current search query")
+        self.bookmark_btn.setAccessibleName("Bookmark query")
 
         self.search_btn = QPushButton("Search")
         self.search_btn.setObjectName("PrimaryButton")
+        self.search_btn.setAccessibleName("Run search")
 
         self.library_toggle_btn = QPushButton("Library")
         self.library_toggle_btn.setCheckable(True)
+        self.library_toggle_btn.setAccessibleName("Toggle history and bookmarks drawer")
         self.inspector_toggle_btn = QPushButton("Files")
         self.inspector_toggle_btn.setCheckable(True)
         self.inspector_toggle_btn.setChecked(True)
+        self.inspector_toggle_btn.setAccessibleName("Toggle torrent file inspector")
         self.theme_toggle_btn = QPushButton("Light Mode")
+        self.theme_toggle_btn.setAccessibleName("Toggle color theme")
         self.settings_btn = QPushButton("Settings")
+        self.settings_btn.setAccessibleName("Open settings")
 
         header.addWidget(self.tv_btn)
         header.addWidget(self.movie_btn)
@@ -131,7 +137,7 @@ class MainWindow(QMainWindow):
         root.addWidget(header_frame)
 
         # Workspace Splitter: [Library Drawer] | [Main Workspace] | [File Inspector]
-        self.main_splitter = QSplitter(Qt.Horizontal)
+        self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
 
         self.library_drawer = LibraryDrawer(self.state_store)
         self.library_drawer.setVisible(False)
@@ -144,8 +150,8 @@ class MainWindow(QMainWindow):
         self.loading_panel = self._build_loading_panel()
 
         self.center_stack.addWidget(self.welcome_panel)  # 0
-        self.center_stack.addWidget(self.tv_view)        # 1
-        self.center_stack.addWidget(self.table_view)     # 2
+        self.center_stack.addWidget(self.tv_view)  # 1
+        self.center_stack.addWidget(self.table_view)  # 2
         self.center_stack.addWidget(self.loading_panel)  # 3
 
         self.file_inspector = FileInspectorDrawer()
@@ -172,6 +178,7 @@ class MainWindow(QMainWindow):
         self.status_progress.setRange(0, 0)
         self.status_progress.setFixedSize(120, 12)
         self.status_progress.setTextVisible(False)
+        self.status_progress.setAccessibleName("Search activity indicator")
         self.status_progress.setVisible(False)
         self.endpoint_label = QLabel(f"API: {self.client.base_url}")
         self.status_bar.addPermanentWidget(self.status_progress)
@@ -182,7 +189,7 @@ class MainWindow(QMainWindow):
         panel = QFrame()
         panel.setObjectName("PanelSurface")
         layout = QVBoxLayout(panel)
-        layout.setAlignment(Qt.AlignCenter)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.setSpacing(10)
 
         title = QLabel("TPB / Apibay Desktop")
@@ -190,7 +197,7 @@ class MainWindow(QMainWindow):
         title_font.setPointSize(18)
         title_font.setBold(True)
         title.setFont(title_font)
-        title.setAlignment(Qt.AlignCenter)
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         subtitle = QLabel(
             "Select TV Series, Movies, or General above, enter a title, and hit Enter.\n"
@@ -198,28 +205,29 @@ class MainWindow(QMainWindow):
             "• Click any release row to inspect internal files or batch export magnet links."
         )
         subtitle.setObjectName("MutedLabel")
-        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.empty_message_label = QLabel("")
-        self.empty_message_label.setAlignment(Qt.AlignCenter)
+        self.empty_message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty_message_label.setWordWrap(True)
         self.empty_message_label.setVisible(False)
 
         self.retry_search_btn = QPushButton("Retry Search")
         self.retry_search_btn.setObjectName("PrimaryButton")
+        self.retry_search_btn.setAccessibleName("Retry search")
         self.retry_search_btn.setVisible(False)
 
         layout.addWidget(title)
         layout.addWidget(subtitle)
         layout.addWidget(self.empty_message_label)
-        layout.addWidget(self.retry_search_btn, alignment=Qt.AlignCenter)
+        layout.addWidget(self.retry_search_btn, alignment=Qt.AlignmentFlag.AlignCenter)
         return panel
 
     def _build_loading_panel(self) -> QFrame:
         panel = QFrame()
         panel.setObjectName("PanelSurface")
         layout = QVBoxLayout(panel)
-        layout.setAlignment(Qt.AlignCenter)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.setSpacing(12)
 
         self.loading_title_label = QLabel("Searching Apibay...")
@@ -227,11 +235,11 @@ class MainWindow(QMainWindow):
         title_font.setPointSize(16)
         title_font.setBold(True)
         self.loading_title_label.setFont(title_font)
-        self.loading_title_label.setAlignment(Qt.AlignCenter)
+        self.loading_title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.loading_detail_label = QLabel("")
         self.loading_detail_label.setObjectName("MutedLabel")
-        self.loading_detail_label.setAlignment(Qt.AlignCenter)
+        self.loading_detail_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.loading_progress_bar = QProgressBar()
         self.loading_progress_bar.setRange(0, 0)
@@ -241,15 +249,16 @@ class MainWindow(QMainWindow):
 
         self.loading_elapsed_label = QLabel("Connecting... (0.0s)")
         self.loading_elapsed_label.setObjectName("MutedLabel")
-        self.loading_elapsed_label.setAlignment(Qt.AlignCenter)
+        self.loading_elapsed_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.cancel_search_btn = QPushButton("Cancel Search")
+        self.cancel_search_btn.setAccessibleName("Cancel active search")
 
         layout.addWidget(self.loading_title_label)
         layout.addWidget(self.loading_detail_label)
-        layout.addWidget(self.loading_progress_bar, alignment=Qt.AlignCenter)
+        layout.addWidget(self.loading_progress_bar, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.loading_elapsed_label)
-        layout.addWidget(self.cancel_search_btn, alignment=Qt.AlignCenter)
+        layout.addWidget(self.cancel_search_btn, alignment=Qt.AlignmentFlag.AlignCenter)
         return panel
 
     def _connect_signals(self) -> None:
@@ -263,12 +272,16 @@ class MainWindow(QMainWindow):
         self.bookmark_btn.clicked.connect(self._toggle_current_bookmark)
 
         self.library_toggle_btn.toggled.connect(self.library_drawer.setVisible)
-        self.library_drawer.close_requested.connect(lambda: self.library_toggle_btn.setChecked(False))
+        self.library_drawer.close_requested.connect(
+            lambda: self.library_toggle_btn.setChecked(False)
+        )
         self.library_drawer.search_requested.connect(self.run_query)
         self.library_drawer.bookmarks_changed.connect(self._update_bookmark_button)
 
         self.inspector_toggle_btn.toggled.connect(self.file_inspector.setVisible)
-        self.file_inspector.close_requested.connect(lambda: self.inspector_toggle_btn.setChecked(False))
+        self.file_inspector.close_requested.connect(
+            lambda: self.inspector_toggle_btn.setChecked(False)
+        )
         self.file_inspector.retry_requested.connect(self.workers.start_files_lookup)
 
         self.theme_toggle_btn.clicked.connect(self.toggle_theme)
@@ -316,13 +329,19 @@ class MainWindow(QMainWindow):
     def _refresh_mode_ui(self) -> None:
         if self._current_mode == "tv":
             self.tv_btn.setChecked(True)
-            self.search_input.setPlaceholderText("Enter TV show title (e.g. Severance, Breaking Bad, The Office)...")
+            self.search_input.setPlaceholderText(
+                "Enter TV show title (e.g. Severance, Breaking Bad, The Office)..."
+            )
         elif self._current_mode == "movie":
             self.movie_btn.setChecked(True)
-            self.search_input.setPlaceholderText("Enter movie title (e.g. Inception, Dune Part Two)...")
+            self.search_input.setPlaceholderText(
+                "Enter movie title (e.g. Inception, Dune Part Two)..."
+            )
         else:
             self.general_btn.setChecked(True)
-            self.search_input.setPlaceholderText("Enter general search query across all categories...")
+            self.search_input.setPlaceholderText(
+                "Enter general search query across all categories..."
+            )
 
     def _update_bookmark_button(self) -> None:
         query = self.search_input.text().strip() or self._last_query
@@ -371,7 +390,9 @@ class MainWindow(QMainWindow):
         self.retry_search_btn.setVisible(False)
         self.empty_message_label.setVisible(False)
         self.loading_title_label.setText(f"Searching Apibay for '{query}'...")
-        mode_label = "TV Series" if mode == "tv" else ("Movies" if mode == "movie" else "All Categories")
+        mode_label = (
+            "TV Series" if mode == "tv" else ("Movies" if mode == "movie" else "All Categories")
+        )
         self.loading_detail_label.setText(f"Mode: {mode_label} · Endpoint: {self.client.base_url}")
         self.loading_elapsed_label.setText("Fetching releases... (0.0s)")
         self.center_stack.setCurrentIndex(3)
@@ -407,7 +428,7 @@ class MainWindow(QMainWindow):
             self.table_view.set_torrents(
                 torrents,
                 preferred_quality=self.state_store.settings.default_quality,
-                precheck_first=(mode == "movie"),
+                precheck_first=False,
             )
             self.action_bar.set_default_filename(f"{sanitize_filename(query)}_magnets.txt")
             self.center_stack.setCurrentIndex(2)
@@ -467,7 +488,7 @@ class MainWindow(QMainWindow):
         clean_theme = "light" if str(theme_name).lower() == "light" else "dark"
         self.state_store.settings.theme = clean_theme
         app = QApplication.instance()
-        if app is not None:
+        if isinstance(app, QApplication):
             app.setStyleSheet(build_stylesheet(clean_theme))
         else:  # pragma: no cover - defensive fallback
             self.setStyleSheet(build_stylesheet(clean_theme))
@@ -491,9 +512,7 @@ class MainWindow(QMainWindow):
         )
         if dlg.exec():
             s = self.state_store.settings
-            self.client.base_url = s.api_url.rstrip("/")
-            self.client.proxy = s.proxy or None
-            self.client.clear_cache()
+            self.client.reconfigure(s.api_url, s.proxy or None)
             self.endpoint_label.setText(f"API: {self.client.base_url}")
             self.apply_theme(s.theme)
             self.status_bar.showMessage("Settings saved.")

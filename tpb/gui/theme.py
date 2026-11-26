@@ -87,12 +87,9 @@ def build_stylesheet(theme_name: str) -> str:
     QLabel#MutedLabel {{
         color: {p.text_muted};
     }}
-    QLabel#BannerInfo {{
-        background-color: {p.accent_subtle};
-        border: 1px solid {p.accent};
-        border-radius: 2px;
-        padding: 6px 10px;
-        color: {p.text};
+    QLabel#ValidationError {{
+        color: {p.seed_low};
+        font-weight: 500;
     }}
     QLineEdit, QComboBox, QSpinBox {{
         background-color: {p.surface_alt};
@@ -127,6 +124,9 @@ def build_stylesheet(theme_name: str) -> str:
     QPushButton:hover {{
         border-color: {p.accent};
         background-color: {p.badge_bg};
+    }}
+    QPushButton:focus, QTableView:focus, QTreeWidget:focus, QListWidget:focus {{
+        border: 1px solid {p.accent};
     }}
     QPushButton:disabled {{
         color: {p.text_muted};

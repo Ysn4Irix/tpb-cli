@@ -1,7 +1,7 @@
 """Bottom magnet handoff & batch export action bar."""
 
 from pathlib import Path
-from typing import Callable, List, Optional
+from collections.abc import Callable
 from PySide6.QtCore import QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (
@@ -30,16 +30,16 @@ class ActionBar(QFrame):
     def __init__(
         self,
         state_store: AppStateStore,
-        url_opener: Optional[Callable[[str], bool]] = None,
-        parent: Optional[QWidget] = None,
+        url_opener: Callable[[str], bool] | None = None,
+        parent: QWidget | None = None,
     ):
         super().__init__(parent)
         self.setObjectName("ActionBar")
         self.state_store = state_store
         self._url_opener = url_opener or (lambda uri: QDesktopServices.openUrl(QUrl(uri)))
-        self._selected: List[Torrent] = []
+        self._selected: list[Torrent] = []
         self._default_filename: str = "torrents_magnets.txt"
-        self._pending_open_queue: List[str] = []
+        self._pending_open_queue: list[str] = []
 
         self._open_timer = QTimer(self)
         self._open_timer.setInterval(BATCH_OPEN_INTERVAL_MS)
@@ -59,9 +59,12 @@ class ActionBar(QFrame):
         layout.addStretch(1)
 
         self.copy_btn = QPushButton("Copy Magnet(s)")
+        self.copy_btn.setAccessibleName("Copy selected magnet links")
         self.open_btn = QPushButton("Open in Client")
+        self.open_btn.setAccessibleName("Open selected magnets in torrent client")
         self.export_btn = QPushButton("Export .txt...")
         self.export_btn.setObjectName("PrimaryButton")
+        self.export_btn.setAccessibleName("Export selected magnet links to file")
 
         layout.addWidget(self.copy_btn)
         layout.addWidget(self.open_btn)
@@ -72,7 +75,7 @@ class ActionBar(QFrame):
         self.open_btn.clicked.connect(self.open_selected_magnets)
         self.export_btn.clicked.connect(self.export_selected_to_file_dialog)
 
-    def set_selected_torrents(self, torrents: List[Torrent]) -> None:
+    def set_selected_torrents(self, torrents: list[Torrent]) -> None:
         """Update current selection list and action button availability."""
         self._selected = list(torrents)
         self._refresh_ui()
@@ -99,7 +102,7 @@ class ActionBar(QFrame):
         self.open_btn.setEnabled(has_valid_magnets)
         self.export_btn.setEnabled(has_valid_magnets)
 
-    def _valid_magnets(self) -> List[str]:
+    def _valid_magnets(self) -> list[str]:
         return [t.magnet_link for t in self._selected if t.magnet_link]
 
     def copy_selected_magnets(self) -> int:
@@ -115,7 +118,7 @@ class ActionBar(QFrame):
         )
         return len(magnets)
 
-    def open_selected_magnets(self, confirm_batch: Optional[Callable[[int], bool]] = None) -> int:
+    def open_selected_magnets(self, confirm_batch: Callable[[int], bool] | None = None) -> int:
         """
         Launch selected magnet links in the OS torrent client.
         Prompts confirmation for batches above BATCH_OPEN_CONFIRM_THRESHOLD and throttles URIs.
@@ -160,10 +163,10 @@ class ActionBar(QFrame):
                 "Tip: Copy Magnet(s) or Export .txt is instant for large seasons.\n"
                 "Continue opening all links one by one?"
             ),
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
-        return reply == QMessageBox.Yes
+        return reply == QMessageBox.StandardButton.Yes
 
     def _dispatch_next_magnet(self) -> None:
         if not self._pending_open_queue:
@@ -175,7 +178,7 @@ class ActionBar(QFrame):
             self._open_timer.stop()
             self.status_message.emit("Finished dispatching magnet links to client.")
 
-    def export_selected_to_file_dialog(self) -> Optional[Path]:
+    def export_selected_to_file_dialog(self) -> Path | None:
         """Prompt user for a destination .txt path and export selected magnet links."""
         if not self._valid_magnets():
             return None
@@ -188,7 +191,7 @@ class ActionBar(QFrame):
             "Export Magnet Links",
             suggested_path,
             "Text Files (*.txt);;All Files (*)",
-            options=QFileDialog.DontConfirmOverwrite,
+            options=QFileDialog.Option.DontConfirmOverwrite,
         )
         if not chosen_path:
             return None
@@ -199,8 +202,8 @@ class ActionBar(QFrame):
     def export_torrents_to_path(
         self,
         dest_path: Path,
-        collision_resolver: Optional[Callable[[Path], str]] = None,
-    ) -> Optional[Path]:
+        collision_resolver: Callable[[Path], str] | None = None,
+    ) -> Path | None:
         """
         Write selected magnets to dest_path with Overwrite / Append / Cancel collision resolution.
         Returns destination Path when written, or None if cancelled.
@@ -232,9 +235,9 @@ class ActionBar(QFrame):
         box = QMessageBox(self)
         box.setWindowTitle("File Already Exists")
         box.setText(f"'{dest_path.name}' already exists.\nWhat would you like to do?")
-        overwrite_btn = box.addButton("Overwrite", QMessageBox.AcceptRole)
-        append_btn = box.addButton("Append", QMessageBox.ActionRole)
-        cancel_btn = box.addButton("Cancel", QMessageBox.RejectRole)
+        overwrite_btn = box.addButton("Overwrite", QMessageBox.ButtonRole.AcceptRole)
+        append_btn = box.addButton("Append", QMessageBox.ButtonRole.ActionRole)
+        cancel_btn = box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
         box.setDefaultButton(overwrite_btn)
         box.exec()
 
