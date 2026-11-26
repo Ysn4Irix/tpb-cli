@@ -42,7 +42,7 @@ def _safe_get_choices(self, choices, default):
 InquirerPyUIListControl._get_choices = _safe_get_choices
 
 from tpb.api import ApibayClient, ApibayError, CAT_TV_HD, CAT_MOVIES_HD, CAT_ALL
-from tpb.models import Torrent, ensure_torrents
+from tpb.models import Torrent, ensure_torrents, sanitize_filename
 from tpb.parser import (
     filter_and_group_episodes,
     get_season_packs,
@@ -85,11 +85,7 @@ TEXT_BACK_KEYBINDINGS = {
 }
 
 
-def sanitize_filename(name: str) -> str:
-    """Convert a show or title string into a safe file slug."""
-    clean = re.sub(r"[^\w\s-]", "", name.lower())
-    clean = re.sub(r"[\s_]+", "_", clean).strip("_")
-    return clean or "torrents"
+# sanitize_filename is shared via tpb.models and re-exported here for compatibility.
 
 
 def is_back(val: Any) -> bool:

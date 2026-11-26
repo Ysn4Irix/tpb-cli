@@ -7,4 +7,7 @@ recursive-include tpb *.py
 
 recursive-exclude tests *
 recursive-exclude .agents *
+recursive-exclude packaging *
+recursive-exclude dist *
+recursive-exclude build *
 global-exclude *.py[cod] __pycache__ *.so

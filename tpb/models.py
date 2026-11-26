@@ -1,9 +1,27 @@
 """Data models for torrents and metadata."""
 
+import re
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
 from typing import Optional, List, Sequence, Any
 import urllib.parse
+
+
+def format_bytes(size_bytes: int | float) -> str:
+    """Format a byte count into a human-readable IEC unit string (e.g. 1.45 GiB)."""
+    bytes_val = float(max(0, size_bytes))
+    for unit in ["B", "KiB", "MiB", "GiB", "TiB"]:
+        if bytes_val < 1024.0 or unit == "TiB":
+            return f"{bytes_val:.2f} {unit}" if unit != "B" else f"{int(bytes_val)} B"
+        bytes_val /= 1024.0
+    return f"{int(size_bytes)} B"
+
+
+def sanitize_filename(name: str) -> str:
+    """Convert a show or title string into a filesystem-safe slug."""
+    clean = re.sub(r"[^\w\s-]", "", name.lower())
+    clean = re.sub(r"[\s_]+", "_", clean).strip("_")
+    return clean or "torrents"
 
 # List of high-uptime public trackers
 DEFAULT_TRACKERS = [
@@ -52,12 +70,7 @@ class Torrent:
     @property
     def human_size(self) -> str:
         """Return human-readable file size (e.g. 1.45 GiB)."""
-        bytes_val = float(self.size_bytes)
-        for unit in ["B", "KiB", "MiB", "GiB", "TiB"]:
-            if bytes_val < 1024.0 or unit == "TiB":
-                return f"{bytes_val:.2f} {unit}" if unit != "B" else f"{int(bytes_val)} B"
-            bytes_val /= 1024.0
-        return f"{self.size_bytes} B"
+        return format_bytes(self.size_bytes)
 
     @property
     def formatted_date(self) -> str:
@@ -115,3 +128,54 @@ def ensure_torrents(items: Sequence[Any]) -> List[Torrent]:
     if not items:
         return []
     return [ensure_torrent(item) for item in items]
+
+
+@dataclass
+class TorrentFile:
+    """Normalized file entry inside a torrent payload."""
+
+    name: str
+    size_bytes: int
+
+    @property
+    def human_size(self) -> str:
+        """Return human-readable file size."""
+        return format_bytes(self.size_bytes)
+
+
+def normalize_torrent_files(raw_files: Any) -> List[TorrentFile]:
+    """Normalize raw Apibay /f.php file-list payloads into TorrentFile records."""
+    if not isinstance(raw_files, list):
+        return []
+
+    normalized: List[TorrentFile] = []
+    for item in raw_files:
+        if isinstance(item, TorrentFile):
+            normalized.append(item)
+            continue
+        if not isinstance(item, dict):
+            continue
+
+        raw_name = item.get("name", "")
+        if isinstance(raw_name, list):
+            name = "/".join(str(part).strip() for part in raw_name if str(part).strip())
+        else:
+            name = str(raw_name).strip()
+
+        if not name:
+            continue
+
+        raw_size = item.get("size", item.get("size_bytes", 0))
+        if isinstance(raw_size, list):
+            raw_size = raw_size[0] if raw_size else 0
+        try:
+            size_bytes = max(0, int(raw_size))
+        except (ValueError, TypeError):
+            size_bytes = 0
+
+        if len(raw_files) == 1 and size_bytes == 0 and "not found" in name.lower():
+            return []
+
+        normalized.append(TorrentFile(name=name, size_bytes=size_bytes))
+
+    return normalized

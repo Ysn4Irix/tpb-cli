@@ -1,10 +1,11 @@
 """Apibay API Client for querying torrents and fetching file details."""
 
 import os
+import threading
 from typing import List, Optional
 import httpx
 
-from tpb.models import Torrent
+from tpb.models import Torrent, TorrentFile, normalize_torrent_files
 from tpb.parser import enrich_torrent_metadata
 
 DEFAULT_BASE_URL = os.environ.get("APIBAY_BASE_URL", "https://apibay.org")
@@ -48,7 +49,15 @@ class ApibayClient:
             "User-Agent": DEFAULT_USER_AGENT,
             "Accept": "application/json, text/plain, */*",
         }
+        self._cache_lock = threading.Lock()
         self._cache = {}
+        self._files_cache = {}
+
+    def clear_cache(self) -> None:
+        """Clear cached search and file-list responses."""
+        with self._cache_lock:
+            self._cache.clear()
+            self._files_cache.clear()
 
     def _get_client(self) -> httpx.Client:
         kwargs = {
@@ -75,8 +84,10 @@ class ApibayClient:
             return []
 
         cache_key = (clean_query.lower(), category or "")
-        if use_cache and cache_key in self._cache:
-            return list(self._cache[cache_key])
+        if use_cache:
+            with self._cache_lock:
+                if cache_key in self._cache:
+                    return list(self._cache[cache_key])
 
         url = f"{self.base_url}/q.php"
         params = {"q": clean_query}
@@ -95,12 +106,14 @@ class ApibayClient:
             raise ApibayError(f"Failed to parse JSON response from Apibay: {exc}") from exc
 
         if not isinstance(data, list):
-            self._cache[cache_key] = []
+            with self._cache_lock:
+                self._cache[cache_key] = []
             return []
 
         # Check for dummy "No results returned" item
         if len(data) == 1 and (data[0].get("id") == "0" or data[0].get("name") == "No results returned"):
-            self._cache[cache_key] = []
+            with self._cache_lock:
+                self._cache[cache_key] = []
             return []
 
         torrents: List[Torrent] = []
@@ -126,8 +139,9 @@ class ApibayClient:
 
         # Sort by seeders descending
         torrents.sort(key=lambda t: t.seeders, reverse=True)
-        self._cache[cache_key] = torrents
-        return torrents
+        with self._cache_lock:
+            self._cache[cache_key] = torrents
+        return list(torrents)
 
     def get_files(self, torrent_id: str) -> List[dict]:
         """Retrieve the list of files and sizes for a given torrent ID."""
@@ -144,3 +158,20 @@ class ApibayClient:
             raise ApibayConnectionError(f"Could not connect to {self.base_url}: {exc}") from exc
         except ValueError as exc:
             raise ApibayError(f"Failed to parse file list JSON from Apibay: {exc}") from exc
+
+    def get_parsed_files(self, torrent_id: str, use_cache: bool = True) -> List[TorrentFile]:
+        """Retrieve and normalize file entries for a given torrent ID, with thread-safe caching."""
+        clean_id = str(torrent_id).strip()
+        if not clean_id:
+            return []
+
+        if use_cache:
+            with self._cache_lock:
+                if clean_id in self._files_cache:
+                    return list(self._files_cache[clean_id])
+
+        raw_files = self.get_files(clean_id)
+        parsed = normalize_torrent_files(raw_files)
+        with self._cache_lock:
+            self._files_cache[clean_id] = parsed
+        return list(parsed)

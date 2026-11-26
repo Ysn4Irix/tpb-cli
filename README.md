@@ -50,10 +50,16 @@ A fast, interactive Python CLI and automation tool for searching movies and TV s
 
 ### Option 1: Direct Install via pip (Recommended)
 
-Install directly from GitHub with a single command:
+Install the lightweight CLI directly from GitHub:
 
 ```bash
 pip install git+https://github.com/Ysn4Irix/tpb-cli.git
+```
+
+Or include the optional **PySide6 Desktop GUI** (`[gui]` extra):
+
+```bash
+pip install "tpb-cli[gui] @ git+https://github.com/Ysn4Irix/tpb-cli.git"
 ```
 
 Or install from a pre-built wheel:
@@ -68,11 +74,38 @@ pip install tpb_cli-0.1.0-py3-none-any.whl
 git clone https://github.com/Ysn4Irix/tpb-cli.git
 cd tpb-cli
 
-# Install in editable mode for development
-pip install -e .
+# Install CLI + GUI + dev/packaging dependencies in editable mode
+pip install -e ".[gui,dev]"
 ```
 
-After installation, the `tpb` executable command will be immediately available in your terminal.
+After installation, `tpb` (CLI) and `tpb-gui` (Desktop GUI, when `[gui]` is installed) are available in your terminal.
+
+---
+
+## 🖥️ Desktop GUI Mode
+
+Launch the native desktop window (`PySide6`):
+
+```bash
+tpb-gui
+# or via CLI flag:
+tpb --gui
+```
+
+### Desktop GUI Highlights
+- **TV Series Browser**: Regional disambiguation chips (`US`, `UK`, `All`), auto-detected Season list with episode & pack counts, Season Packs table, and an interactive Episode Quality Matrix (top preferred release pre-checked; toggling an alternate quality automatically switches selection for that episode).
+- **Movies & General Search**: Live-filterable and numerically sortable release table with VIP/Trusted uploader tags and resolution/codec indicators.
+- **Torrent File Inspector**: Click any release to asynchronously fetch and inspect internal file paths and sizes (`ApibayClient.get_files`).
+- **Batch Magnet Handoff**: Copy selected magnets to clipboard, launch staggered `magnet:` URIs in your default torrent client (with safety confirmation for large batches > 5), or export `.txt` with Overwrite/Append prompt.
+- **Library & Settings**: Dark Mode (default) / Light Mode toggle (`Ctrl+T`), persistent search history & bookmarks sidebar, and Apibay mirror / HTTP & SOCKS5 proxy configuration (`Ctrl+,`).
+
+### Building a Standalone Windows `.exe`
+
+```powershell
+.\packaging\build_exe.ps1
+```
+
+This bundles `dist\tpb-gui.exe` using PyInstaller with console suppression (`--windowed`).
 
 ---
 
@@ -147,6 +180,7 @@ tpb "The Matrix" --proxy "socks5://127.0.0.1:9050" --api-url "https://apibay.org
 | `-p` | `--print` | Print magnet links to terminal stdout. |
 | | `--pack` | Prefer complete season pack over individual episodes. |
 | `-i` | `--interactive` | Force interactive TUI even if a query argument was passed. |
+| | `--gui` | Launch the PySide6 desktop GUI (`tpb-cli[gui]`). |
 | | `--api-url` | Custom Apibay backend URL (Default: `https://apibay.org`). |
 | | `--proxy` | HTTP or SOCKS5 proxy URL (e.g. `socks5://127.0.0.1:9050`). |
 | `-v` | `--version` | Display program version and exit. |
@@ -160,20 +194,36 @@ tpb "The Matrix" --proxy "socks5://127.0.0.1:9050" --api-url "https://apibay.org
 tpb-cli/
 ├── tpb/
 │   ├── __init__.py        # Package initialization & version metadata
-│   ├── api.py             # ApibayClient, HTTP requests, caching & error handling
-│   ├── cli.py             # Argument parsing and headless automation entrypoint
+│   ├── api.py             # ApibayClient, thread-safe caching & file-list normalization
+│   ├── cli.py             # Argument parsing, --gui launcher & headless automation
 │   ├── exporter.py        # File export, magnet formatters & Rich tables
 │   ├── interactive.py     # Interactive TUI, state machine & 0ms back navigation
-│   ├── models.py          # Torrent dataclass, properties & model coercion
-│   └── parser.py          # Regex parsers for seasons, episodes, quality & codecs
+│   ├── models.py          # Torrent/TorrentFile dataclasses, formatting & coercion
+│   ├── parser.py          # Regex parsers for seasons, episodes, quality & codecs
+│   └── gui/               # Optional PySide6 desktop interface (pip install tpb-cli[gui])
+│       ├── app.py         # QApplication bootstrap & tpb-gui entrypoint
+│       ├── main_window.py # Desktop window shell, search bar & workspace orchestration
+│       ├── state.py       # Persistent settings, dark/light theme, history & bookmarks
+│       ├── theme.py       # Dark & Light QSS stylesheets and palette tokens
+│       ├── workers.py     # QThreadPool async workers with stale-request guards
+│       ├── views/         # TV Series browser & Movie/General sortable results table
+│       └── widgets/       # File Inspector, Magnet ActionBar, Library drawer & Settings
+├── packaging/
+│   ├── tpb-gui.spec       # PyInstaller Windows --windowed spec
+│   └── build_exe.ps1      # Standalone .exe build script
 ├── tests/
+│   ├── conftest.py        # Headless QT_QPA_PLATFORM=offscreen setup
 │   ├── test_api.py        # API client and response mocking tests
 │   ├── test_exporter.py   # File writer & dict resilience tests
+│   ├── test_gui_state.py  # GUI settings, history, bookmarks & CLI --gui tests
+│   ├── test_gui_views.py  # Offscreen Qt widget/view/action-bar tests
+│   ├── test_gui_workers.py# Async worker fallback & stale-request tests
 │   ├── test_interactive.py# Navigation, series disambiguation & prompt tests
 │   ├── test_models.py     # Dataclass properties & tracker verification
 │   └── test_parser.py     # TV metadata extraction & episode grouping tests
-├── pyproject.toml         # Build configuration & dependencies
-├── requirements.txt       # Direct runtime dependencies
+├── pyproject.toml         # Build configuration & optional [gui]/[dev] extras
+├── MANIFEST.in            # Distribution manifest rules
+├── requirements.txt       # Direct core runtime dependencies
 └── README.md              # Project documentation
 ```
 
@@ -181,7 +231,7 @@ tpb-cli/
 
 ## 🧪 Running Tests
 
-The test suite contains 24 automated unit tests covering API queries, metadata parsing, interactive state transitions, and file exports:
+The test suite covers API queries, metadata parsing, interactive TUI navigation, file exports, and offscreen PySide6 GUI workflows:
 
 ```bash
 pytest -v

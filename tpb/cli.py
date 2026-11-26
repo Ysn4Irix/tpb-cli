@@ -17,7 +17,6 @@ from tpb import __version__
 from tpb.api import ApibayClient, ApibayError, CAT_TV, CAT_MOVIES, CAT_ALL
 from tpb.parser import filter_and_group_episodes, get_season_packs
 from tpb.exporter import render_torrents_table, render_magnet_list, export_magnets_to_file
-from tpb.interactive import InteractiveSession, sanitize_filename
 
 console = Console()
 
@@ -90,6 +89,11 @@ Examples:
         type=str,
         default=None,
         help="HTTP/SOCKS5 proxy URL (e.g. http://127.0.0.1:8080).",
+    )
+    parser.add_argument(
+        "--gui",
+        action="store_true",
+        help="Launch the PySide6 desktop graphical user interface.",
     )
     parser.add_argument(
         "-v", "--version",
@@ -179,8 +183,21 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
+    if args.gui:
+        try:
+            from tpb.gui.app import main as gui_main
+        except ImportError:
+            console.print(
+                "[bold red]GUI dependencies missing:[/] PySide6 is required for desktop mode.\n"
+                'Install with: [cyan]pip install "tpb-cli[gui]"[/cyan]'
+            )
+            sys.exit(1)
+        sys.exit(gui_main(api_url=args.api_url, proxy=args.proxy))
+
     # If no arguments provided or explicitly interactive
     if args.query is None or args.interactive:
+        from tpb.interactive import InteractiveSession
+
         client = ApibayClient(
             base_url=args.api_url or "https://apibay.org",
             proxy=args.proxy,

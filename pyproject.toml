@@ -43,6 +43,16 @@ dependencies = [
     "prompt_toolkit>=3.0.0",
 ]
 
+[project.optional-dependencies]
+gui = [
+    "PySide6>=6.7.0",
+]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-qt>=4.4.0",
+    "pyinstaller>=6.0.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/Ysn4Irix/tpb-cli"
 Repository = "https://github.com/Ysn4Irix/tpb-cli.git"
@@ -50,6 +60,9 @@ Issues = "https://github.com/Ysn4Irix/tpb-cli/issues"
 
 [project.scripts]
 tpb = "tpb.cli:main"
+
+[project.gui-scripts]
+tpb-gui = "tpb.gui.app:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
