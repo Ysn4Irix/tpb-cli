@@ -157,3 +157,15 @@ def test_column_widths_persistence_and_validation(tmp_path: Path):
     sanitized = AppStateStore(config_path=cfg)
     assert sanitized.get_column_widths("bad_bool") == []
     assert sanitized.get_column_widths("ok") == [24, 4000]
+
+
+def test_package_version_matches_pyproject():
+    import re
+    import tpb
+
+    pyproject_text = (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject_text, re.MULTILINE)
+    assert match is not None
+    assert match.group(1) == tpb.__version__

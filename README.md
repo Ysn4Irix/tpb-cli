@@ -2,7 +2,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-24%20Passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-47%20Passed-brightgreen.svg)]()
 [![Code Style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 A fast, interactive Python CLI and automation tool for searching movies and TV series, selecting episodes/seasons across quality releases, and batch-exporting magnet links via the **apibay.org** (The Pirate Bay) backend.
@@ -64,7 +64,7 @@ pip install "tpb-cli[gui] @ git+https://github.com/Ysn4Irix/tpb-cli.git"
 
 Or install from a pre-built wheel:
 ```bash
-pip install tpb_cli-0.2.0-py3-none-any.whl
+pip install tpb_cli-0.3.0-py3-none-any.whl
 ```
 
 ### Option 2: Local / Development Install
@@ -272,12 +272,12 @@ This repository includes GitHub Actions workflows in [`.github/workflows/`](.git
      - **Test Matrix**: `pytest -v` with `QT_QPA_PLATFORM=offscreen` across Ubuntu & Windows (Python 3.10–3.14).
      - **Package Build**: `python -m build` and `twine check dist/*`.
 2. **Release Automation ([`release.yml`](.github/workflows/release.yml))**:
-   - Triggered on SemVer tags matching `v*.*.*` (for example `v0.2.0`).
+   - Triggered on SemVer tags matching `v*.*.*` (for example `v0.3.0`).
    - Re-runs full lint, formatting, type, security, and cross-platform test verification before building release binaries (`tpb_cli-*.whl`, `tpb_cli-*.tar.gz`, and Windows standalone `tpb-gui.exe`).
    - Extracts matching version notes from [`CHANGELOG.md`](CHANGELOG.md) and publishes the GitHub Release under scoped `contents: write` permission.
    - Local release checklist before tagging:
      1. Bump `version` in `pyproject.toml` and `__version__` in `tpb/__init__.py` (`MAJOR.MINOR.PATCH`).
-     2. Update `CHANGELOG.md` and commit with a Conventional Commit (e.g., `chore(release): prepare v0.2.0`).
+     2. Update `CHANGELOG.md` and commit with a Conventional Commit (e.g., `chore(release): prepare v0.3.0`).
      3. Wait for all CI checks to pass before creating and pushing a `vX.Y.Z` tag.
 
 ---
