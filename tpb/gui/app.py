@@ -4,6 +4,7 @@ import sys
 from collections.abc import Sequence
 from PySide6.QtWidgets import QApplication
 
+from tpb.gui.assets import load_app_icon
 from tpb.gui.main_window import MainWindow
 from tpb.gui.state import AppStateStore
 from tpb.gui.theme import build_stylesheet
@@ -13,10 +14,14 @@ def create_application(argv: Sequence[str] | None = None) -> QApplication:
     """Create or reuse the singleton QApplication configured for desktop styling."""
     existing = QApplication.instance()
     if isinstance(existing, QApplication):
-        return existing
-    app = QApplication(list(argv) if argv is not None else sys.argv)
+        app = existing
+    else:
+        app = QApplication(list(argv) if argv is not None else sys.argv)
     app.setApplicationName("tpb-cli")
     app.setOrganizationName("Ysn4Irix")
+    app_icon = load_app_icon()
+    if not app_icon.isNull():
+        app.setWindowIcon(app_icon)
     return app
 
 

@@ -74,6 +74,9 @@ where = ["."]
 include = ["tpb*"]
 exclude = ["tests*", ".agents*"]
 
+[tool.setuptools.package-data]
+"tpb.gui.assets" = ["*.png", "*.ico"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

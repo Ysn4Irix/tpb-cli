@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from tpb import __version__
 from tpb.api import ApibayClient
+from tpb.gui.assets import load_app_icon
 from tpb.gui.state import AppStateStore
 from tpb.gui.theme import build_stylesheet
 from tpb.gui.views.results_table import TorrentResultsView
@@ -56,8 +57,11 @@ class MainWindow(QMainWindow):
         self._loading_timer.timeout.connect(self._update_loading_elapsed)
 
         self.setWindowTitle(f"tpb-cli v{__version__} — Magnet Search & Batch Export")
-        self.resize(1260, 780)
-        self.setMinimumSize(940, 600)
+        app_icon = load_app_icon()
+        if not app_icon.isNull():
+            self.setWindowIcon(app_icon)
+        self.resize(1460, 780)
+        self.setMinimumSize(1080, 620)
 
         self._build_ui()
         self._connect_signals()
@@ -163,7 +167,7 @@ class MainWindow(QMainWindow):
         self.main_splitter.setStretchFactor(0, 0)
         self.main_splitter.setStretchFactor(1, 1)
         self.main_splitter.setStretchFactor(2, 0)
-        self.main_splitter.setSizes([240, 720, 320])
+        self.main_splitter.setSizes([240, 900, 320])
 
         root.addWidget(self.main_splitter, stretch=1)
 

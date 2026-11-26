@@ -207,6 +207,7 @@ tpb-cli/
 │   ├── models.py          # Torrent/TorrentFile dataclasses, formatting & coercion
 │   ├── parser.py          # Regex parsers for seasons, episodes, quality & codecs
 │   └── gui/               # Optional PySide6 desktop interface (pip install tpb-cli[gui])
+│       ├── assets/        # Multi-resolution Cyan Vector Magnet PNG/ICO icons & loader
 │       ├── app.py         # QApplication bootstrap & tpb-gui entrypoint
 │       ├── main_window.py # Desktop window shell, search bar, loading & workspace states
 │       ├── state.py       # Persistent settings, dark/light theme, history & bookmarks

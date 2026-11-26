@@ -16,11 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Torrent File Inspector Drawer** rendering normalized internal file paths and sizes via `ApibayClient.get_parsed_files`.
 - **Magnet Action Bar** supporting clipboard copy, throttled OS `magnet:` client launching with batch safety confirmation (> 5 links), and `.txt` export with Overwrite/Append/Cancel handling.
 - **Library & Settings**: Persistent Dark/Light theme switching (`Ctrl+T`), search history, pinned bookmarks, and Apibay mirror / HTTP & SOCKS5 proxy configuration (`Ctrl+,`) with URL boundary validation.
-- Standalone Windows `.exe` packaging specification (`packaging/tpb-gui.spec` and `packaging/build_exe.ps1`).
+- Standalone Windows `.exe` packaging specification (`packaging/tpb-gui.spec` and `packaging/build_exe.ps1`) with bundled multi-resolution Cyan Vector Magnet desktop/executable icon (`tpb/gui/assets/`).
 - Production GitHub Actions workflows for CI (lint, format, typecheck, security, cross-platform tests, build) and tagged releases (`.github/workflows/ci.yml`, `.github/workflows/release.yml`).
 - Offscreen Qt GUI unit and integration tests (`tests/test_gui_state.py`, `tests/test_gui_workers.py`, `tests/test_gui_views.py`).
 
 ### Changed
+- Widened default `MainWindow` workspace dimensions (`1460 × 780`, minimum `1080 × 620`, splitter `[240, 900, 320]`).
 - Defaulted all desktop GUI search views (TV episodes, season packs, movies, general) to unchecked rows on initial load.
 - Extracted shared `format_bytes`, `sanitize_filename`, `TorrentFile`, and `normalize_torrent_files` utilities into `tpb/models.py`.
 - Added thread-safe `_cache_lock` and URL/proxy validation (`validate_http_url`, `validate_proxy_url`, `reconfigure`) to `tpb/api.py`.

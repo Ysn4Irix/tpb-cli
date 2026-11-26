@@ -12,6 +12,8 @@ from unittest.mock import MagicMock, patch
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication
 
+from tpb.gui.app import create_application
+from tpb.gui.assets import get_app_icon_path, load_app_icon
 from tpb.gui.main_window import MainWindow
 from tpb.gui.state import AppStateStore
 from tpb.gui.theme import DARK_PALETTE, LIGHT_PALETTE, build_stylesheet
@@ -212,6 +214,9 @@ def test_main_window_integration_and_windowed_stdout_none(qtbot, tmp_path: Path)
         window = MainWindow(client=client, state_store=store)
         qtbot.addWidget(window)
         window.show()
+        assert window.width() >= 1460
+        assert window.minimumWidth() == 1080
+        assert not window.windowIcon().isNull()
 
         # Simulate completed Movie search (unchecked by default)
         movie = _torrent("500", "Dune.Part.Two.2024.1080p.WEB.x265", seeders=450)
@@ -314,3 +319,17 @@ def test_settings_dialog_validates_urls_and_saves_cleanly(qtbot, tmp_path: Path)
     assert store.settings.api_url == "https://mirror.example.org"
     assert store.settings.proxy == "socks5://127.0.0.1:9050"
     assert store.settings.theme == "light"
+
+
+def test_app_icon_assets_and_qapplication_icon(qtbot):
+    icon_path = get_app_icon_path()
+    assert icon_path is not None
+    assert icon_path.exists()
+    assert (icon_path.parent / "tpb-gui.ico").exists()
+
+    icon = load_app_icon()
+    assert not icon.isNull()
+    assert len(icon.availableSizes()) >= 3
+
+    app = create_application(["tpb-gui"])
+    assert not app.windowIcon().isNull()

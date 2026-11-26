@@ -4,7 +4,7 @@ include LICENSE
 include pyproject.toml
 include requirements.txt
 
-recursive-include tpb *.py
+recursive-include tpb *.py *.png *.ico
 
 recursive-exclude tests *
 recursive-exclude .agents *

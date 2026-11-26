@@ -4,12 +4,13 @@
 from pathlib import Path
 
 PROJECT_ROOT = Path(SPECPATH).resolve().parent
+ASSETS_DIR = PROJECT_ROOT / "tpb" / "gui" / "assets"
 
 a = Analysis(
     [str(PROJECT_ROOT / "tpb" / "gui" / "app.py")],
     pathex=[str(PROJECT_ROOT)],
     binaries=[],
-    datas=[],
+    datas=[(str(ASSETS_DIR), "tpb/gui/assets")],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -66,6 +67,7 @@ exe = EXE(
     a.datas,
     [],
     name="tpb-gui",
+    icon=str(ASSETS_DIR / "tpb-gui.ico"),
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
