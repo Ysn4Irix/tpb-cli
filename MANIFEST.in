@@ -7,6 +7,7 @@ include requirements.txt
 recursive-include tpb *.py *.png *.ico
 
 recursive-exclude tests *
+recursive-exclude android *
 recursive-exclude .agents *
 recursive-exclude .github *
 recursive-exclude docs *

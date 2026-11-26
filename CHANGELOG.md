@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-11-26
+
+### Added
+- Native **Android Application** under `android/` built with Kotlin, Jetpack Compose, Material 3, OkHttp, Kotlinx Serialization, and Jetpack DataStore (`minSdk 26`, `compileSdk 35`):
+  - Full Apibay search parity (`TV Series`, `Movies`, `General`) with regional disambiguation chips, auto-detected seasons, Season Packs vs Multi-Quality Episodes, `Select Recommended`, unchecked-by-default selection, loading/cancel/retry states, and live filters/sorting.
+  - `/f.php` File Inspector bottom sheet, bottom thumb-zone `SelectionActionBar` (`Copy`, single/stepped `ACTION_VIEW` `magnet:` dispatch with no-client fallback, and Storage Access Framework `.txt` export).
+  - Persistent OLED Dark (`#0D1117` / `#0EA5E9`) & Light Material 3 theme, Cyan Vector Magnet adaptive launcher icon, Library History/Bookmarks tab, and Custom Mirror + HTTP/SOCKS5 proxy validation in Settings.
+  - Added JVM unit + OkHttp MockWebServer tests, Compose UI `androidTest` coverage, and `.github/workflows/android-ci.yml`.
+
 ## [0.3.0] - 2026-11-26
 
 ### Added

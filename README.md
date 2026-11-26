@@ -64,7 +64,7 @@ pip install "tpb-cli[gui] @ git+https://github.com/Ysn4Irix/tpb-cli.git"
 
 Or install from a pre-built wheel:
 ```bash
-pip install tpb_cli-0.3.0-py3-none-any.whl
+pip install tpb_cli-0.4.0-py3-none-any.whl
 ```
 
 ### Option 2: Local / Development Install
@@ -193,9 +193,15 @@ tpb "The Matrix" --proxy "socks5://127.0.0.1:9050" --api-url "https://apibay.org
 ```
 tpb-cli/
 ├── .github/workflows/
-│   ├── ci.yml             # Lint, format, typecheck, security, cross-OS tests & build
+│   ├── ci.yml             # Python lint, format, typecheck, security, tests & build
+│   ├── android-ci.yml     # Android unit tests, lintDebug & debug APK build
 │   └── release.yml        # Tagged release automation (.whl, .tar.gz & tpb-gui.exe)
+├── android/               # Native Kotlin + Jetpack Compose + Material 3 Android app
+│   ├── app/src/main/      # Search/Library/Settings screens, OkHttp client, DataStore
+│   ├── app/src/test/      # JVM parser, formatter, theme, MockWebServer & ViewModel tests
+│   └── app/src/androidTest/ # Compose UI instrumentation tests
 ├── docs/
+│   ├── android-tpb-app.md # Android client architecture plan & checklist
 │   ├── tpb-cli.md         # CLI design notes
 │   └── tpb-desktop-gui.md # Desktop GUI implementation plan & checklist
 ├── tpb/
@@ -239,12 +245,24 @@ tpb-cli/
 
 ---
 
+## 📱 Android Client (`android/`)
+
+A native Android companion app built with **Kotlin, Jetpack Compose, Material 3, OkHttp, Kotlinx Serialization, and Jetpack DataStore** (`minSdk 26`, `compileSdk 35`):
+
+- **Feature Parity**: TV Series Browser (`US`/`UK` chips, Season navigator, Packs vs Multi-Quality Episodes, `Select Recommended`), filterable & sortable Movies/General search, `/f.php` File Inspector bottom sheet, `SelectionActionBar` (`Copy`, `ACTION_VIEW` `magnet:` dispatch with batch safe fallback, `.txt` export via SAF), History/Bookmarks, and custom Mirror URL + HTTP/SOCKS5 proxy settings.
+- **Build & Test Locally** (from `android/`):
+  ```bash
+  ./gradlew testDebugUnitTest lintDebug assembleDebug
+  ```
+
+---
+
 ## 🧪 Running Tests & Quality Checks
 
-The test suite covers API queries, metadata parsing, interactive TUI navigation, file exports, and offscreen PySide6 GUI workflows:
+The Python test suite covers API queries, metadata parsing, interactive TUI navigation, file exports, and offscreen PySide6 GUI workflows:
 
 ```bash
-# Run full test suite
+# Run Python test suite
 pytest -v
 
 # Linting, formatting, and type checks
@@ -255,6 +273,9 @@ mypy tpb
 # Security & dependency vulnerability scans
 bandit -r tpb -ll
 pip-audit --skip-editable
+
+# Android checks (inside android/)
+./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
 ---
@@ -263,21 +284,16 @@ pip-audit --skip-editable
 
 This repository includes GitHub Actions workflows in [`.github/workflows/`](.github/workflows):
 
-1. **Continuous Integration ([`ci.yml`](.github/workflows/ci.yml))**:
-   - Triggered automatically on pushes and pull requests to `master`/`main`.
-   - Enforces least-privilege `contents: read` permissions and pip caching.
-   - Fails fast across sequential gates:
-     - **Quality**: `ruff format --check`, `ruff check`, and `mypy`.
-     - **Security**: `bandit -r tpb -ll` static analysis and `pip-audit` dependency scan.
-     - **Test Matrix**: `pytest -v` with `QT_QPA_PLATFORM=offscreen` across Ubuntu & Windows (Python 3.10–3.14).
-     - **Package Build**: `python -m build` and `twine check dist/*`.
+1. **Continuous Integration ([`ci.yml`](.github/workflows/ci.yml) & [`android-ci.yml`](.github/workflows/android-ci.yml))**:
+   - `ci.yml` runs Python checks on pushes/PRs to `master`/`main`: `ruff format --check`, `ruff check`, `mypy`, `bandit -r tpb -ll`, `pip-audit`, cross-OS `pytest -v` (Ubuntu & Windows, Python 3.10–3.14), `python -m build`, and `twine check`.
+   - `android-ci.yml` runs on changes touching `android/**`: `testDebugUnitTest`, `lintDebug`, `assembleDebug`, and uploads `app-debug.apk` under `contents: read` permissions.
 2. **Release Automation ([`release.yml`](.github/workflows/release.yml))**:
-   - Triggered on SemVer tags matching `v*.*.*` (for example `v0.3.0`).
+   - Triggered on SemVer tags matching `v*.*.*` (for example `v0.4.0`).
    - Re-runs full lint, formatting, type, security, and cross-platform test verification before building release binaries (`tpb_cli-*.whl`, `tpb_cli-*.tar.gz`, and Windows standalone `tpb-gui.exe`).
    - Extracts matching version notes from [`CHANGELOG.md`](CHANGELOG.md) and publishes the GitHub Release under scoped `contents: write` permission.
    - Local release checklist before tagging:
-     1. Bump `version` in `pyproject.toml` and `__version__` in `tpb/__init__.py` (`MAJOR.MINOR.PATCH`).
-     2. Update `CHANGELOG.md` and commit with a Conventional Commit (e.g., `chore(release): prepare v0.3.0`).
+     1. Bump `version` in `pyproject.toml`, `__version__` in `tpb/__init__.py`, and `versionName` in `android/app/build.gradle.kts` (`MAJOR.MINOR.PATCH`).
+     2. Update `CHANGELOG.md` and commit with a Conventional Commit (e.g., `chore(release): prepare v0.4.0`).
      3. Wait for all CI checks to pass before creating and pushing a `vX.Y.Z` tag.
 
 ---
