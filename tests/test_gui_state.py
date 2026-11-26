@@ -137,3 +137,23 @@ def test_cli_gui_flag_parses_and_handles_missing_pyside6():
         with pytest.raises(SystemExit) as exc_info:
             cli_main()
         assert exc_info.value.code == 1
+
+
+def test_column_widths_persistence_and_validation(tmp_path: Path):
+    cfg = tmp_path / "columns_state.json"
+    store = AppStateStore(config_path=cfg)
+    assert store.get_column_widths("tv_episodes") == []
+
+    # Valid widths persist and clamp outliers safely
+    store.set_column_widths("tv_episodes", [510, 125, 95, 80, 160])
+    reloaded = AppStateStore(config_path=cfg)
+    assert reloaded.get_column_widths("tv_episodes") == [510, 125, 95, 80, 160]
+
+    # Corrupt/invalid types in JSON column_widths are ignored safely
+    cfg.write_text(
+        '{"settings": {"column_widths": {"bad_bool": [true, 100], "ok": [5, 99999]}}}',
+        encoding="utf-8",
+    )
+    sanitized = AppStateStore(config_path=cfg)
+    assert sanitized.get_column_widths("bad_bool") == []
+    assert sanitized.get_column_widths("ok") == [24, 4000]

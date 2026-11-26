@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication
+from PySide6.QtWidgets import QHeaderView
 
 from tpb.gui.app import create_application
 from tpb.gui.assets import get_app_icon_path, load_app_icon
@@ -333,3 +334,60 @@ def test_app_icon_assets_and_qapplication_icon(qtbot):
 
     app = create_application(["tpb-gui"])
     assert not app.windowIcon().isNull()
+
+
+def test_tv_episode_and_table_columns_resizable_and_persisted(qtbot, tmp_path: Path):
+    cfg = tmp_path / "persisted_cols.json"
+    client = MagicMock()
+    client.base_url = "https://apibay.org"
+    client.proxy = None
+
+    store1 = AppStateStore(config_path=cfg)
+    w1 = MainWindow(client=client, state_store=store1)
+    qtbot.addWidget(w1)
+    w1.show()
+
+    ep_header = w1.tv_view.episode_tree.header()
+    assert ep_header.stretchLastSection() is False
+    for col in range(5):
+        assert ep_header.sectionResizeMode(col) == QHeaderView.ResizeMode.Interactive
+
+    tbl_header = w1.table_view.table.horizontalHeader()
+    assert tbl_header.stretchLastSection() is False
+    assert tbl_header.sectionResizeMode(0) == QHeaderView.ResizeMode.Fixed
+    for col in range(1, 9):
+        assert tbl_header.sectionResizeMode(col) == QHeaderView.ResizeMode.Interactive
+
+    insp_header = w1.file_inspector.files_tree.header()
+    assert insp_header.sectionResizeMode(0) == QHeaderView.ResizeMode.Interactive
+    assert insp_header.sectionResizeMode(1) == QHeaderView.ResizeMode.Interactive
+
+    # Simulate user resizing columns across TV episode tree, results table, and inspector
+    w1.tv_view.episode_tree.setColumnWidth(0, 520)
+    w1.tv_view.episode_tree.setColumnWidth(1, 150)
+    w1.tv_view.episode_tree.setColumnWidth(4, 185)
+    w1.table_view.table.setColumnWidth(1, 410)
+    w1.file_inspector.files_tree.setColumnWidth(0, 260)
+
+    # Rebuilding TV tree in-session preserves resized widths
+    w1.tv_view.set_search_results(
+        "Severance",
+        [_torrent("90", "Severance.S01E01.1080p.WEB.x265", seeders=180)],
+        default_quality="1080p",
+    )
+    assert ep_header.sectionSize(0) == 520
+    assert ep_header.sectionSize(1) == 150
+    assert ep_header.sectionSize(4) == 185
+
+    # Closing flushes debounced widths and new window instance restores them
+    w1.close()
+
+    store2 = AppStateStore(config_path=cfg)
+    w2 = MainWindow(client=client, state_store=store2)
+    qtbot.addWidget(w2)
+    ep_header2 = w2.tv_view.episode_tree.header()
+    assert ep_header2.sectionSize(0) == 520
+    assert ep_header2.sectionSize(1) == 150
+    assert ep_header2.sectionSize(4) == 185
+    assert w2.table_view.table.horizontalHeader().sectionSize(1) == 410
+    assert w2.file_inspector.files_tree.header().sectionSize(0) == 260

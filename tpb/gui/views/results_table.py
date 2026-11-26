@@ -14,7 +14,6 @@ from PySide6.QtGui import QColor, QFont, QKeyEvent
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -23,6 +22,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from tpb.gui.column_state import PersistentHeaderController
+from tpb.gui.state import AppStateStore
 from tpb.gui.theme import ThemePalette, get_palette
 from tpb.models import Torrent
 
@@ -328,8 +329,16 @@ class TorrentResultsView(QWidget):
     selection_changed = Signal(list)
     torrent_focused = Signal(object)
 
-    def __init__(self, theme_name: str = "dark", parent: QWidget | None = None):
+    def __init__(
+        self,
+        theme_name: str = "dark",
+        parent: QWidget | None = None,
+        state_store: AppStateStore | None = None,
+        columns_state_key: str = "results_table",
+    ):
         super().__init__(parent)
+        self._state_store = state_store
+        self._columns_state_key = columns_state_key
         self.model = TorrentTableModel(theme_name=theme_name, parent=self)
         self.proxy = TorrentFilterProxyModel(self)
         self.proxy.setSourceModel(self.model)
@@ -380,13 +389,15 @@ class TorrentResultsView(QWidget):
         self.table.verticalHeader().setVisible(False)
         self.table.setShowGrid(True)
 
-        header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        for col in (2, 3, 4, 5, 6, 8):
-            header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Interactive)
-        self.table.setColumnWidth(7, 130)
+        self._header_ctrl = PersistentHeaderController(
+            header=self.table.horizontalHeader(),
+            state_store=self._state_store,
+            state_key=self._columns_state_key,
+            default_widths=[36, 360, 75, 75, 85, 65, 65, 130, 100],
+            fixed_sections={0},
+            stretch_last_section=False,
+            minimum_section_size=36,
+        )
 
         layout.addWidget(self.table, stretch=1)
 

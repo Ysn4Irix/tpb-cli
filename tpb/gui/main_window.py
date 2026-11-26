@@ -1,7 +1,7 @@
 """Main application window coordinating search modes, results views, drawers, and actions."""
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QKeySequence, QShortcut
+from PySide6.QtGui import QCloseEvent, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -149,8 +149,15 @@ class MainWindow(QMainWindow):
 
         self.center_stack = QStackedWidget()
         self.welcome_panel = self._build_welcome_panel()
-        self.tv_view = TvBrowserView(theme_name=self.state_store.settings.theme)
-        self.table_view = TorrentResultsView(theme_name=self.state_store.settings.theme)
+        self.tv_view = TvBrowserView(
+            theme_name=self.state_store.settings.theme,
+            state_store=self.state_store,
+        )
+        self.table_view = TorrentResultsView(
+            theme_name=self.state_store.settings.theme,
+            state_store=self.state_store,
+            columns_state_key="results_table",
+        )
         self.loading_panel = self._build_loading_panel()
 
         self.center_stack.addWidget(self.welcome_panel)  # 0
@@ -158,7 +165,7 @@ class MainWindow(QMainWindow):
         self.center_stack.addWidget(self.table_view)  # 2
         self.center_stack.addWidget(self.loading_panel)  # 3
 
-        self.file_inspector = FileInspectorDrawer()
+        self.file_inspector = FileInspectorDrawer(state_store=self.state_store)
         self.file_inspector.setMinimumWidth(280)
 
         self.main_splitter.addWidget(self.library_drawer)
@@ -520,3 +527,8 @@ class MainWindow(QMainWindow):
             self.endpoint_label.setText(f"API: {self.client.base_url}")
             self.apply_theme(s.theme)
             self.status_bar.showMessage("Settings saved.")
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        """Flush any debounced UI layout state changes cleanly on window close."""
+        self.state_store.save()
+        super().closeEvent(event)

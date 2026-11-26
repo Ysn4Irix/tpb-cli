@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 from tpb.api import DEFAULT_BASE_URL
 
@@ -24,6 +25,30 @@ def get_default_export_dir() -> str:
     return str(downloads if downloads.exists() else Path.home())
 
 
+def _clamp_column_widths(widths: list[Any]) -> list[int]:
+    """Validate and clamp column widths to safe UI pixel bounds."""
+    clean_widths: list[int] = []
+    for item in widths:
+        if isinstance(item, bool) or not isinstance(item, (int, float)):
+            return []
+        clean_widths.append(max(24, min(int(item), 4000)))
+    return clean_widths
+
+
+def _parse_column_widths(raw_value: Any) -> dict[str, list[int]]:
+    """Validate persisted header column widths from JSON state."""
+    if not isinstance(raw_value, dict):
+        return {}
+    parsed: dict[str, list[int]] = {}
+    for key, widths in raw_value.items():
+        if not isinstance(key, str) or not key.strip() or not isinstance(widths, list):
+            continue
+        clean = _clamp_column_widths(widths)
+        if clean:
+            parsed[key.strip()] = clean
+    return parsed
+
+
 @dataclass
 class GuiSettings:
     """Persisted user configuration for the desktop interface."""
@@ -34,6 +59,7 @@ class GuiSettings:
     default_quality: str = "1080p"
     last_export_dir: str = field(default_factory=get_default_export_dir)
     max_history: int = 25
+    column_widths: dict[str, list[int]] = field(default_factory=dict)
 
 
 @dataclass
@@ -90,6 +116,7 @@ class AppStateStore:
                     raw_settings.get("last_export_dir") or get_default_export_dir()
                 ),
                 max_history=max(5, int(raw_settings.get("max_history", 25))),
+                column_widths=_parse_column_widths(raw_settings.get("column_widths")),
             )
 
         self.history = [
@@ -121,6 +148,19 @@ class AppStateStore:
         }
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
         self.config_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    def get_column_widths(self, key: str) -> list[int]:
+        """Return saved pixel column widths for a view key, or empty list."""
+        return list(self.settings.column_widths.get(key, []))
+
+    def set_column_widths(self, key: str, widths: list[int], *, persist: bool = True) -> None:
+        """Update saved column widths for a view key and optionally persist to disk."""
+        clean = _clamp_column_widths(widths)
+        if not key or not clean:
+            return
+        self.settings.column_widths[key] = clean
+        if persist:
+            self.save()
 
     def add_history(self, query: str, mode: str) -> None:
         """Record a search query at the top of recent history, deduplicating case-insensitively."""

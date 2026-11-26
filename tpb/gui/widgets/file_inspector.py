@@ -5,7 +5,6 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QPushButton,
     QTreeWidget,
@@ -14,6 +13,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from tpb.gui.column_state import PersistentHeaderController
+from tpb.gui.state import AppStateStore
 from tpb.models import Torrent, TorrentFile
 
 
@@ -23,9 +24,14 @@ class FileInspectorDrawer(QFrame):
     retry_requested = Signal(str)
     close_requested = Signal()
 
-    def __init__(self, parent: QWidget | None = None):
+    def __init__(
+        self,
+        state_store: AppStateStore | None = None,
+        parent: QWidget | None = None,
+    ):
         super().__init__(parent)
         self.setObjectName("PanelSurface")
+        self._state_store = state_store
         self._current_torrent: Torrent | None = None
         self._build_ui()
 
@@ -73,9 +79,14 @@ class FileInspectorDrawer(QFrame):
         self.files_tree.setHeaderLabels(["File Path", "Size"])
         self.files_tree.setRootIsDecorated(False)
         self.files_tree.setAlternatingRowColors(True)
-        tree_header = self.files_tree.header()
-        tree_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        tree_header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self._header_ctrl = PersistentHeaderController(
+            header=self.files_tree.header(),
+            state_store=self._state_store,
+            state_key="file_inspector",
+            default_widths=[210, 80],
+            stretch_last_section=False,
+            minimum_section_size=48,
+        )
         layout.addWidget(self.files_tree, stretch=1)
 
         self.retry_btn.clicked.connect(self._on_retry_clicked)

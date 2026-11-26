@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Offscreen Qt GUI unit and integration tests (`tests/test_gui_state.py`, `tests/test_gui_workers.py`, `tests/test_gui_views.py`).
 
 ### Changed
+- Made columns across TV Episode Tree (`Episode / Quality Variant`, `Badge`, `Size`, `Seeds`, `Uploader`), Results Table, and File Inspector interactively resizable (`Interactive` mode) with persisted widths saved in `gui_state.json`.
 - Widened default `MainWindow` workspace dimensions (`1460 × 780`, minimum `1080 × 620`, splitter `[240, 900, 320]`).
 - Defaulted all desktop GUI search views (TV episodes, season packs, movies, general) to unchecked rows on initial load.
 - Extracted shared `format_bytes`, `sanitize_filename`, `TorrentFile`, and `normalize_torrent_files` utilities into `tpb/models.py`.

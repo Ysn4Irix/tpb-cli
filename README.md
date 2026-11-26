@@ -209,6 +209,7 @@ tpb-cli/
 │   └── gui/               # Optional PySide6 desktop interface (pip install tpb-cli[gui])
 │       ├── assets/        # Multi-resolution Cyan Vector Magnet PNG/ICO icons & loader
 │       ├── app.py         # QApplication bootstrap & tpb-gui entrypoint
+│       ├── column_state.py# Persistent interactive table & tree column widths
 │       ├── main_window.py # Desktop window shell, search bar, loading & workspace states
 │       ├── state.py       # Persistent settings, dark/light theme, history & bookmarks
 │       ├── theme.py       # Dark & Light QSS stylesheets and palette tokens

@@ -174,6 +174,10 @@ def build_stylesheet(theme_name: str) -> str:
         text-transform: uppercase;
         font-size: 11px;
     }}
+    QHeaderView::section:hover {{
+        background-color: {p.badge_bg};
+        color: {p.text};
+    }}
     QTabWidget::pane {{
         border: 1px solid {p.border};
         background-color: {p.surface};

@@ -17,9 +17,10 @@ from PySide6.QtWidgets import (
     QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
-    QHeaderView,
 )
 
+from tpb.gui.column_state import PersistentHeaderController
+from tpb.gui.state import AppStateStore
 from tpb.gui.theme import ThemePalette, get_palette
 from tpb.gui.views.results_table import TorrentResultsView
 from tpb.models import Torrent, sanitize_filename
@@ -42,9 +43,15 @@ class TvBrowserView(QWidget):
     torrent_focused = Signal(object)
     export_hint_changed = Signal(str)
 
-    def __init__(self, theme_name: str = "dark", parent: QWidget | None = None):
+    def __init__(
+        self,
+        theme_name: str = "dark",
+        parent: QWidget | None = None,
+        state_store: AppStateStore | None = None,
+    ):
         super().__init__(parent)
         self._theme_name = theme_name
+        self._state_store = state_store
         self._palette: ThemePalette = get_palette(theme_name)
         self._show_name = ""
         self._all_torrents: list[Torrent] = []
@@ -163,14 +170,21 @@ class TvBrowserView(QWidget):
             ["Episode / Quality Variant", "Badge", "Size", "Seeds", "Uploader"]
         )
         self.episode_tree.setAlternatingRowColors(True)
-        tree_header = self.episode_tree.header()
-        tree_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for col in (1, 2, 3):
-            tree_header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
-        tree_header.setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
-        self.episode_tree.setColumnWidth(4, 120)
+        self._episode_header_ctrl = PersistentHeaderController(
+            header=self.episode_tree.header(),
+            state_store=self._state_store,
+            state_key="tv_episodes",
+            default_widths=[460, 115, 95, 75, 135],
+            stretch_last_section=False,
+            minimum_section_size=48,
+        )
 
-        self.fallback_table = TorrentResultsView(theme_name=self._theme_name, parent=self)
+        self.fallback_table = TorrentResultsView(
+            theme_name=self._theme_name,
+            parent=self,
+            state_store=self._state_store,
+            columns_state_key="tv_results_table",
+        )
 
         self.content_stack.addWidget(self.episode_tree)  # index 0
         self.content_stack.addWidget(self.fallback_table)  # index 1
