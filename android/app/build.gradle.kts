@@ -5,6 +5,49 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+val resolvedVersionName = System.getenv("TPB_ANDROID_VERSION_NAME")
+    ?.trim()
+    ?.removePrefix("v")
+    ?.takeIf { it.isNotEmpty() }
+    ?: "0.4.1"
+
+val resolvedVersionCode = System.getenv("ANDROID_VERSION_CODE")
+    ?.trim()
+    ?.toIntOrNull()
+    ?.takeIf { it > 0 }
+    ?: run {
+        val parts = resolvedVersionName.substringBefore("-").split(".")
+        val major = parts.getOrNull(0)?.toIntOrNull() ?: 0
+        val minor = parts.getOrNull(1)?.toIntOrNull() ?: 0
+        val patch = parts.getOrNull(2)?.toIntOrNull() ?: 0
+        (major * 10_000 + minor * 100 + patch).coerceAtLeast(1)
+    }
+
+val releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")?.trim().orEmpty()
+val releaseKeystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD").orEmpty()
+val releaseKeyAlias = System.getenv("ANDROID_KEY_ALIAS")?.trim().orEmpty()
+val releaseKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+    ?.takeIf { it.isNotEmpty() }
+    ?: releaseKeystorePassword
+val requiredSigningInputs = listOf(
+    releaseKeystorePath,
+    releaseKeystorePassword,
+    releaseKeyAlias,
+)
+val hasAnyReleaseSigningInput =
+    requiredSigningInputs.any { it.isNotEmpty() } ||
+        !System.getenv("ANDROID_KEY_PASSWORD").isNullOrEmpty()
+val hasAllReleaseSigningInputs = requiredSigningInputs.all { it.isNotEmpty() }
+if (hasAnyReleaseSigningInput) {
+    check(hasAllReleaseSigningInputs) {
+        "Incomplete Android release signing configuration: set ANDROID_KEYSTORE_PATH, " +
+            "ANDROID_KEYSTORE_PASSWORD, and ANDROID_KEY_ALIAS (ANDROID_KEY_PASSWORD defaults to ANDROID_KEYSTORE_PASSWORD)."
+    }
+    check(file(releaseKeystorePath).isFile) {
+        "ANDROID_KEYSTORE_PATH does not point to an existing file: $releaseKeystorePath"
+    }
+}
+
 android {
     namespace = "com.ysn4irix.tpb"
     compileSdk = 35
@@ -13,16 +56,35 @@ android {
         applicationId = "com.ysn4irix.tpb"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.4.0"
+        versionCode = resolvedVersionCode
+        versionName = resolvedVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        if (hasAllReleaseSigningInputs) {
+            create("release") {
+                storeFile = file(releaseKeystorePath)
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = if (hasAllReleaseSigningInputs) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

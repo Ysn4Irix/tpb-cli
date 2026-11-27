@@ -64,7 +64,7 @@ pip install "tpb-cli[gui] @ git+https://github.com/Ysn4Irix/tpb-cli.git"
 
 Or install from a pre-built wheel:
 ```bash
-pip install tpb_cli-0.4.0-py3-none-any.whl
+pip install tpb_cli-0.4.1-py3-none-any.whl
 ```
 
 ### Option 2: Local / Development Install
@@ -252,7 +252,7 @@ A native Android companion app built with **Kotlin, Jetpack Compose, Material 3,
 - **Feature Parity**: TV Series Browser (`US`/`UK` chips, Season navigator, Packs vs Multi-Quality Episodes, `Select Recommended`), filterable & sortable Movies/General search, `/f.php` File Inspector bottom sheet, `SelectionActionBar` (`Copy`, `ACTION_VIEW` `magnet:` dispatch with batch safe fallback, `.txt` export via SAF), History/Bookmarks, and custom Mirror URL + HTTP/SOCKS5 proxy settings.
 - **Build & Test Locally** (from `android/`):
   ```bash
-  ./gradlew testDebugUnitTest lintDebug assembleDebug
+  ./gradlew testDebugUnitTest lintDebug assembleDebug assembleRelease
   ```
 
 ---
@@ -275,7 +275,7 @@ bandit -r tpb -ll
 pip-audit --skip-editable
 
 # Android checks (inside android/)
-./gradlew testDebugUnitTest lintDebug assembleDebug
+./gradlew testDebugUnitTest lintDebug assembleDebug assembleRelease
 ```
 
 ---
@@ -286,14 +286,15 @@ This repository includes GitHub Actions workflows in [`.github/workflows/`](.git
 
 1. **Continuous Integration ([`ci.yml`](.github/workflows/ci.yml) & [`android-ci.yml`](.github/workflows/android-ci.yml))**:
    - `ci.yml` runs Python checks on pushes/PRs to `master`/`main`: `ruff format --check`, `ruff check`, `mypy`, `bandit -r tpb -ll`, `pip-audit`, cross-OS `pytest -v` (Ubuntu & Windows, Python 3.10–3.14), `python -m build`, and `twine check`.
-   - `android-ci.yml` runs on changes touching `android/**`: `testDebugUnitTest`, `lintDebug`, `assembleDebug`, and uploads `app-debug.apk` under `contents: read` permissions.
+   - `android-ci.yml` runs on changes touching `android/**`: `testDebugUnitTest`, `lintDebug`, `assembleDebug`, `assembleRelease`, and uploads debug & release APK workflow artifacts under `contents: read` permissions.
 2. **Release Automation ([`release.yml`](.github/workflows/release.yml))**:
-   - Triggered on SemVer tags matching `v*.*.*` (for example `v0.4.0`).
-   - Re-runs full lint, formatting, type, security, and cross-platform test verification before building release binaries (`tpb_cli-*.whl`, `tpb_cli-*.tar.gz`, and Windows standalone `tpb-gui.exe`).
+   - Triggered on SemVer tags matching `v*.*.*` (for example `v0.4.1`) or manually via `workflow_dispatch` (specifying an existing `v*.*.*` tag).
+   - Re-runs full lint, formatting, type, security, and cross-platform test verification before building release artifacts (`tpb_cli-*.whl`, `tpb_cli-*.tar.gz`, Windows standalone `tpb-gui.exe`, signed `tpb-android-vX.Y.Z.apk`, and `tpb-android-vX.Y.Z.apk.sha256`).
+   - **Android Release Signing**: Configure repository secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, and `ANDROID_KEY_ALIAS` (plus optional `ANDROID_KEY_PASSWORD`, which defaults to `ANDROID_KEYSTORE_PASSWORD` for PKCS12 keystores) for production APK signing. If omitted, `release.yml` automatically falls back to Android debug signing (noted in the release body) so the attached APK remains installable; if only a subset of required signing secrets is provided, the build fails fast to prevent misconfigured releases.
    - Extracts matching version notes from [`CHANGELOG.md`](CHANGELOG.md) and publishes the GitHub Release under scoped `contents: write` permission.
    - Local release checklist before tagging:
-     1. Bump `version` in `pyproject.toml`, `__version__` in `tpb/__init__.py`, and `versionName` in `android/app/build.gradle.kts` (`MAJOR.MINOR.PATCH`).
-     2. Update `CHANGELOG.md` and commit with a Conventional Commit (e.g., `chore(release): prepare v0.4.0`).
+     1. Bump `version` in `pyproject.toml`, `__version__` in `tpb/__init__.py`, and default `versionName` in `android/app/build.gradle.kts` (`MAJOR.MINOR.PATCH`).
+     2. Update `CHANGELOG.md` and commit with a Conventional Commit (e.g., `chore(release): prepare v0.4.1`).
      3. Wait for all CI checks to pass before creating and pushing a `vX.Y.Z` tag.
 
 ---

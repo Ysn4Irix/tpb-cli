@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-11-27
+
+### Added
+- Automated **Android Release APK** pipeline in `.github/workflows/release.yml` (`build-android-apk` job) producing `tpb-android-vX.Y.Z.apk` and `tpb-android-vX.Y.Z.apk.sha256` alongside Python wheels and `tpb-gui.exe`, with manual `workflow_dispatch` tag support.
+- Configurable Android release signing in `android/app/build.gradle.kts` (`ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`) with incomplete-config fail-fast checks, automatic debug-key fallback signing when no release keystore secrets are provided, and deterministic SemVer-derived `versionCode`.
+
+### Changed
+- Updated `.github/workflows/android-ci.yml` to verify `assembleRelease` alongside debug builds and upload both debug and release APKs.
+- Expanded `android/app/proguard-rules.pro` keep attributes for R8 release builds (`Signature`, `InnerClasses`, `EnclosingMethod`).
+
 ## [0.4.0] - 2026-11-26
 
 ### Added

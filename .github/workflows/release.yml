@@ -4,18 +4,46 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "SemVer git tag to build and release (e.g. v0.4.1)"
+        required: true
+        type: string
 
 permissions:
   contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
 
 jobs:
   verify:
     name: Pre-Release Verification
     runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.tag.outputs.name }}
+      version: ${{ steps.tag.outputs.version }}
     env:
       QT_QPA_PLATFORM: offscreen
     steps:
+      - name: Resolve and validate release tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          RELEASE_TAG="${INPUT_TAG:-$REF_NAME}"
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid release tag '$RELEASE_TAG'. Expected format vMAJOR.MINOR.PATCH."
+            exit 1
+          fi
+          echo "name=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -54,6 +82,8 @@ jobs:
       QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -73,14 +103,113 @@ jobs:
           name: windows-executable
           path: dist/tpb-gui.exe
 
+  build-android-apk:
+    name: Build Android Release APK
+    needs: [verify]
+    runs-on: ubuntu-latest
+    outputs:
+      signing_mode: ${{ steps.signing.outputs.mode }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+          cache: "gradle"
+      - name: Grant execute permission for Gradle wrapper
+        run: chmod +x android/gradlew
+      - name: Run Android unit tests and Lint
+        working-directory: android
+        env:
+          TPB_ANDROID_VERSION_NAME: ${{ needs.verify.outputs.version }}
+        run: ./gradlew testDebugUnitTest lintDebug --no-daemon
+      - name: Prepare Android release signing configuration
+        id: signing
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          KEYSTORE_FILE="${RUNNER_TEMP}/release-keystore.jks"
+          HAS_ANY=0
+          HAS_ALL=1
+          for val in "$KEYSTORE_B64" "$KEYSTORE_PASS" "$KEY_ALIAS"; do
+            if [ -n "$val" ]; then
+              HAS_ANY=1
+            else
+              HAS_ALL=0
+            fi
+          done
+          if [ -n "$KEY_PASS" ]; then
+            HAS_ANY=1
+          fi
+          if [ "$HAS_ANY" -eq 1 ] && [ "$HAS_ALL" -eq 0 ]; then
+            echo "::error::Incomplete Android signing secrets. Provide ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, and ANDROID_KEY_ALIAS (ANDROID_KEY_PASSWORD defaults to ANDROID_KEYSTORE_PASSWORD)."
+            exit 1
+          fi
+          if [ "$HAS_ALL" -eq 1 ]; then
+            printf '%s' "$KEYSTORE_B64" | tr -d '\r\n\t ' | base64 --decode > "$KEYSTORE_FILE"
+            if [ ! -s "$KEYSTORE_FILE" ]; then
+              echo "::error::Decoded ANDROID_KEYSTORE_BASE64 produced an empty file."
+              exit 1
+            fi
+            echo "ANDROID_KEYSTORE_PATH=$KEYSTORE_FILE" >> "$GITHUB_ENV"
+            echo "mode=release-keystore" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Android signing secrets not configured; falling back to debug key signing so the release APK remains installable."
+            echo "mode=debug-fallback" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Assemble signed Android release APK
+        working-directory: android
+        env:
+          TPB_ANDROID_VERSION_NAME: ${{ needs.verify.outputs.version }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon
+      - name: Verify APK signature and package release asset
+        env:
+          RELEASE_TAG: ${{ needs.verify.outputs.tag_name }}
+        run: |
+          APK_SRC="android/app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$APK_SRC" ]; then
+            echo "::error::Expected signed release APK not found at $APK_SRC"
+            exit 1
+          fi
+          APKSIGNER=$(ls -1 "${ANDROID_HOME}/build-tools/"*/apksigner 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -n "$APKSIGNER" ]; then
+            "$APKSIGNER" verify --verbose "$APK_SRC"
+          else
+            echo "::warning::apksigner not found under ANDROID_HOME/build-tools"
+          fi
+          mkdir -p dist
+          APK_DEST="dist/tpb-android-${RELEASE_TAG}.apk"
+          cp "$APK_SRC" "$APK_DEST"
+          (cd dist && sha256sum "tpb-android-${RELEASE_TAG}.apk" > "tpb-android-${RELEASE_TAG}.apk.sha256")
+      - name: Clean up temporary release keystore
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/release-keystore.jks"
+      - name: Upload Android APK release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: |
+            dist/tpb-android-*.apk
+            dist/tpb-android-*.apk.sha256
+
   publish-release:
     name: Publish GitHub Release
-    needs: [verify, build-windows-exe]
+    needs: [verify, build-windows-exe, build-android-apk]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - name: Download Python distributions
         uses: actions/download-artifact@v4
         with:
@@ -91,18 +220,29 @@ jobs:
         with:
           name: windows-executable
           path: release-assets
+      - name: Download Android APK artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: android-apk
+          path: release-assets
       - name: Extract changelog notes for tag
         id: changelog
         shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.verify.outputs.tag_name }}
+          RELEASE_VERSION: ${{ needs.verify.outputs.version }}
+          SIGNING_MODE: ${{ needs.build-android-apk.outputs.signing_mode }}
         run: |
-          TAG="${GITHUB_REF_NAME#v}"
-          NOTES=$(awk -v ver="$TAG" '
+          NOTES=$(awk -v ver="$RELEASE_VERSION" '
             $0 ~ "^## \\[" ver "\\]" { found=1; next }
             found && $0 ~ "^## \\[" { exit }
             found { print }
           ' CHANGELOG.md)
           if [ -z "$NOTES" ]; then
-            NOTES="Release $GITHUB_REF_NAME"
+            NOTES="Release $RELEASE_TAG"
+          fi
+          if [ "$SIGNING_MODE" = "debug-fallback" ]; then
+            NOTES=$(printf '%s\n\n> **Android APK Note:** Signed with Android debug fallback key because repository release keystore secrets were not configured.' "$NOTES")
           fi
           {
             echo "notes<<EOF"
@@ -112,8 +252,11 @@ jobs:
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.verify.outputs.tag_name }}
           body: ${{ steps.changelog.outputs.notes }}
           files: |
             release-assets/*.whl
             release-assets/*.tar.gz
             release-assets/tpb-gui.exe
+            release-assets/*.apk
+            release-assets/*.apk.sha256
